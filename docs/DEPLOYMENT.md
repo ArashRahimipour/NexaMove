@@ -55,8 +55,8 @@ On your host's environment-variable settings (never commit these to git):
 
 | Variable | Required | Notes |
 |---|---|---|
-| `DATABASE_URL` | Yes | From step 1. On a pooled connection (Supabase's port-6543 "Transaction pooler" string, PgBouncer in general), also set `DIRECT_URL` below. |
-| `DIRECT_URL` | Only if `DATABASE_URL` is pooled | The same database's **direct** (non-pooled) connection string — on Supabase, port 5432. `prisma migrate` needs this; pgbouncer's transaction mode doesn't support the locks the migration engine uses. |
+| `DATABASE_URL` | Yes | From step 1. On a pooled connection (Supabase's port-6543 "Transaction pooler" string, PgBouncer in general), append `?pgbouncer=true` to the end of the string, and also set `DIRECT_URL` below. Without `?pgbouncer=true`, Prisma's server-side prepared statements collide across PgBouncer's shared backend connections — surfaces as Postgres error `42P05` ("duplicate prepared statement"), often only once real queries run (e.g. the seed script), not during the connection itself. |
+| `DIRECT_URL` | Only if `DATABASE_URL` is pooled | The same database's **direct** (non-pooled) connection string — on Supabase, port 5432. `prisma migrate` needs this; pgbouncer's transaction mode doesn't support the locks the migration engine uses. No `?pgbouncer=true` here — this connection isn't pooled. |
 | `NEXTAUTH_SECRET` | Yes | `openssl rand -base64 32` — a **different** value for staging vs. production |
 | `NEXTAUTH_URL` | Yes | The full public URL of this deployment, e.g. `https://app.nexamove.com.au` |
 | `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Recommended for production | See step 4 |
