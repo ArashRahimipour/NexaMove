@@ -47,18 +47,24 @@ export const canManageServicing = (role: Role) => role === "ADMIN" || role === "
 export const canViewReturns = (role: Role) =>
   role === "ADMIN" || role === "OPERATIONS_MANAGER" || role === "DISPATCHER" || role === "CUSTOMER_SERVICE";
 
+// The "designated logistics representative" completing this from the
+// warehouse isn't necessarily a dispatcher or manager — any back-office
+// role plausibly does this.
+export const canManageMorningComms = (role: Role) =>
+  role === "ADMIN" || role === "OPERATIONS_MANAGER" || role === "DISPATCHER" || role === "CUSTOMER_SERVICE";
+
 // Nav sections a role sees in the back-office shell. Used to render the sidebar
 // and as a second line of defence alongside server-side route checks.
 export function visibleNavSections(role: Role): string[] {
   switch (role) {
     case "ADMIN":
-      return ["dashboard", "ai", "routes", "drivers", "vehicles", "warehouse-audits", "dispatch", "pricing", "kpi", "alerts", "returns", "customer-service", "settlements", "organisations", "servicing", "settings", "audit"];
+      return ["dashboard", "ai", "routes", "drivers", "vehicles", "warehouse-audits", "morning-comms", "dispatch", "pricing", "kpi", "alerts", "returns", "customer-service", "settlements", "organisations", "servicing", "settings", "audit"];
     case "OPERATIONS_MANAGER":
-      return ["dashboard", "ai", "routes", "drivers", "warehouse-audits", "dispatch", "pricing", "kpi", "alerts", "returns", "customer-service", "settlements", "servicing"];
+      return ["dashboard", "ai", "routes", "drivers", "warehouse-audits", "morning-comms", "dispatch", "pricing", "kpi", "alerts", "returns", "customer-service", "settlements", "servicing"];
     case "DISPATCHER":
-      return ["dashboard", "ai", "routes", "dispatch", "pricing", "alerts", "returns"];
+      return ["dashboard", "ai", "routes", "dispatch", "pricing", "alerts", "returns", "morning-comms"];
     case "CUSTOMER_SERVICE":
-      return ["ai", "returns", "customer-service"];
+      return ["ai", "returns", "morning-comms", "customer-service"];
     case "RETAIL_CLIENT":
       return ["client-portal"];
     default:

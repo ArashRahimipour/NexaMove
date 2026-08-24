@@ -16,6 +16,7 @@ import {
   PackageSearch,
   CalendarDays,
   ClipboardCheck,
+  Sunrise,
 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { SignOutButton } from "@/components/SignOutButton";
@@ -29,6 +30,7 @@ const NAV_ITEMS = [
   { key: "drivers", href: "/admin/drivers", label: "Drivers", icon: Users },
   { key: "vehicles", href: "/admin/vehicles", label: "Vehicles", icon: Truck },
   { key: "warehouse-audits", href: "/admin/warehouse-audits", label: "Warehouse Audits", icon: ClipboardCheck },
+  { key: "morning-comms", href: "/admin/morning-comms", label: "Morning Communication", icon: Sunrise },
   { key: "pricing", href: "/admin/pricing", label: "Pricing", icon: Calculator },
   { key: "kpi", href: "/admin/kpi", label: "KPI", icon: BarChart3 },
   { key: "alerts", href: "/admin/alerts", label: "Alerts", icon: Bell },

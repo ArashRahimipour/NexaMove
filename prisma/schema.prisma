@@ -241,14 +241,15 @@ model Organisation {
   active         Boolean  @default(true)
   createdAt      DateTime @default(now())
 
-  users              User[]
-  deliveries         Delivery[]
-  aiConversations    AiConversation[]
-  rateCards          RateCard[]
-  fuelLevyRules      FuelLevyRule[]
-  pricingQuotes      PricingQuote[]
-  servicingSchedules ServicingSchedule[]
-  warehouseAudits    WarehouseAudit[]
+  users                    User[]
+  deliveries               Delivery[]
+  aiConversations          AiConversation[]
+  rateCards                RateCard[]
+  fuelLevyRules            FuelLevyRule[]
+  pricingQuotes            PricingQuote[]
+  servicingSchedules       ServicingSchedule[]
+  warehouseAudits          WarehouseAudit[]
+  morningCommunicationLogs MorningCommunicationLog[]
 
   @@map("organisations")
 }
@@ -296,6 +297,8 @@ model User {
   returnTasksCreated       ReturnTask[]                @relation("ReturnTaskCreatedBy")
   warehouseAuditsAsAuditor WarehouseAudit[]            @relation("WarehouseAuditAuditor")
   warehouseAuditsAsDriver  WarehouseAudit[]            @relation("WarehouseAuditDriver")
+  morningCommsAsDriver     MorningCommunicationLog[]   @relation("MorningCommDriver")
+  morningCommsCreated      MorningCommunicationLog[]   @relation("MorningCommCreatedBy")
 
   @@map("users")
 }
@@ -335,9 +338,10 @@ model Vehicle {
   registrationExpiry DateTime? @db.Date
   createdAt          DateTime  @default(now())
 
-  drivers         Driver[]
-  routes          Route[]
-  warehouseAudits WarehouseAudit[]
+  drivers                  Driver[]
+  routes                   Route[]
+  warehouseAudits          WarehouseAudit[]
+  morningCommunicationLogs MorningCommunicationLog[]
 
   @@map("vehicles")
 }
@@ -437,18 +441,19 @@ model Delivery {
   failedAt       DateTime?
   cancelledAt    DateTime?
 
-  items                 DeliveryItem[]
-  photos                DeliveryPhoto[]
-  trackingEvents        TrackingEvent[]
-  proofOfDelivery       ProofOfDelivery?
-  damageReports         DamageReport[]
-  failedDeliveryReports FailedDeliveryReport[]
-  customerServiceCases  CustomerServiceCase[]
-  customerRating        CustomerRating?
-  aiConversations       AiConversation[]
-  pricingQuote          PricingQuote?
-  dispatchScans         DispatchScan[]
-  returnTasks           ReturnTask[]
+  items                    DeliveryItem[]
+  photos                   DeliveryPhoto[]
+  trackingEvents           TrackingEvent[]
+  proofOfDelivery          ProofOfDelivery?
+  damageReports            DamageReport[]
+  failedDeliveryReports    FailedDeliveryReport[]
+  customerServiceCases     CustomerServiceCase[]
+  customerRating           CustomerRating?
+  aiConversations          AiConversation[]
+  pricingQuote             PricingQuote?
+  dispatchScans            DispatchScan[]
+  returnTasks              ReturnTask[]
+  morningCommunicationLogs MorningCommunicationLog[]
 
   @@index([status])
   @@index([trackingCode])
@@ -551,6 +556,58 @@ model WarehouseAuditItem {
   resolvedAt       DateTime?
 
   @@map("warehouse_audit_items")
+}
+
+// Morning warehouse communication log — overnight exceptions, damaged/
+// missing stock, driver and customer issues raised before the day's runs
+// start. `responsiblePerson` is free text, not a User relation: whoever's
+// accountable for follow-up isn't necessarily a NexaMove system user (could
+// be a Koala warehouse contact), so forcing a system-account link would be
+// wrong more often than it'd help.
+enum MorningCommIssueType {
+  WAREHOUSE_ISSUE
+  DELIVERY_INCIDENT
+  DAMAGED_GOODS
+  RETURNED_STOCK
+  ITEMS_RECEIVED
+  MISSING_STOCK
+  OVERNIGHT_EXCEPTION
+  CUSTOMER_COMPLAINT
+  DRIVER_ISSUE
+  OTHER
+}
+
+enum MorningCommStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+model MorningCommunicationLog {
+  id                String               @id @default(cuid())
+  organisationId    String? // optional client scope (e.g. Koala) — null = general
+  organisation      Organisation?        @relation(fields: [organisationId], references: [id])
+  date              DateTime             @db.Date
+  issueType         MorningCommIssueType
+  deliveryId        String?
+  delivery          Delivery?            @relation(fields: [deliveryId], references: [id])
+  driverId          String?
+  driver            User?                @relation("MorningCommDriver", fields: [driverId], references: [id])
+  vehicleId         String?
+  vehicle           Vehicle?             @relation(fields: [vehicleId], references: [id])
+  description       String
+  actionRequired    String?
+  responsiblePerson String?
+  status            MorningCommStatus    @default(OPEN)
+  attachmentUrl     String?
+  createdById       String
+  createdBy         User                 @relation("MorningCommCreatedBy", fields: [createdById], references: [id])
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@index([date])
+  @@index([status])
+  @@map("morning_communication_logs")
 }
 
 // Collection/exchange return tracking — a job that involves taking goods
