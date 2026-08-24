@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-elevated text-ink antialiased;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center rounded-[10px] bg-brand-500 px-4 py-3 text-base font-semibold text-white shadow-sm transition-colors duration-150 ease-out hover:bg-brand-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-line disabled:text-muted;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center rounded-[10px] border border-line bg-card px-4 py-3 text-base font-semibold text-dim shadow-sm transition-colors duration-150 ease-out hover:border-brand-500 hover:text-brand-600 disabled:cursor-not-allowed disabled:text-muted;
+}
+
+.card {
+  @apply rounded-[14px] border border-line bg-card p-4 shadow-card transition-all duration-150 ease-out;
+}
+
+a.card:hover,
+.card.card-hover:hover {
+  @apply -translate-y-0.5 border-brand-500/40 shadow-elevated;
+}
+
+.field-label {
+  @apply mb-1 block text-xs font-bold uppercase tracking-wide text-dim;
+}
+
+.field-input {
+  @apply block w-full rounded-[8px] border border-line bg-elevated px-3 py-2 text-base text-ink shadow-sm transition-colors duration-150 ease-out placeholder:text-muted hover:border-dim focus:border-brand-500 focus:bg-card focus:outline-none focus:ring-2 focus:ring-brand-500/20;
+}
+
+/* Tables: scope by the .card wrapper every table already lives in, so
+   individual pages don't need per-cell colour classes touched. */
+.card table {
+  @apply w-full text-left text-sm;
+}
+
+.card table thead {
+  @apply border-b border-line bg-elevated text-dim;
+}
+
+.card table th {
+  @apply px-4 py-3 text-xs font-bold uppercase tracking-wide;
+}
+
+.card table tbody tr {
+  @apply border-b border-line text-secondary transition-colors duration-150 ease-out last:border-0;
+}
+
+.card table tbody tr:hover {
+  @apply bg-elevated;
+}
+
+.card table td {
+  @apply px-4 py-3 text-secondary;
+}
+
+.card table td[class*="font-medium"] {
+  color: #0f172a;
+}

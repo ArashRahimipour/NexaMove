@@ -1,0 +1,1517 @@
+// NexaMove logistics platform — database schema
+// Real users, real routes, real deliveries, real tracking events, real proof-of-delivery records.
+// Multi-role, multi-tenant (retail clients), full delivery-status workflow, damage/failed/partial
+// delivery tracking, audit log. See docs/SCHEMA.md for the model-by-model rationale.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  ADMIN
+  OPERATIONS_MANAGER
+  DISPATCHER
+  CUSTOMER_SERVICE
+  DRIVER
+  RETAIL_CLIENT
+}
+
+enum RouteStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// Full delivery lifecycle. Transitions are validated in lib/status-workflow.ts —
+// a driver cannot jump e.g. ASSIGNED -> DELIVERED directly.
+enum DeliveryStatus {
+  DRAFT
+  PENDING
+  READY_FOR_DISPATCH
+  ASSIGNED
+  LOADED
+  ROUTE_STARTED
+  IN_TRANSIT
+  DRIVER_NEARBY
+  ARRIVED
+  UNLOADING
+  ASSEMBLY_IN_PROGRESS
+  DELIVERED
+  FAILED
+  DAMAGED
+  PARTIALLY_DELIVERED
+  RETURN_REQUIRED
+  RETURNED
+  RESCHEDULED
+  CANCELLED
+}
+
+enum TrackingEventType {
+  JOB_CREATED
+  DRIVER_ASSIGNED
+  LOADED
+  ROUTE_STARTED
+  EN_ROUTE
+  CUSTOMER_NOTIFIED
+  DRIVER_NEARBY
+  ARRIVED
+  UNLOADING
+  ASSEMBLY_STARTED
+  PHOTO_CAPTURED
+  SIGNATURE_CAPTURED
+  DAMAGE_NOTED
+  DELIVERED
+  FAILED
+  DAMAGED
+  PARTIALLY_DELIVERED
+  RETURNED
+  RESCHEDULED
+  CANCELLED
+  STATUS_OVERRIDE
+}
+
+enum ItemStatus {
+  PENDING
+  DELIVERED
+  NOT_DELIVERED
+  DAMAGED
+  MISSING
+  REFUSED
+}
+
+enum DamageStage {
+  BEFORE_LOADING
+  DURING_LOADING
+  IN_VEHICLE
+  DURING_TRANSPORT
+  DURING_UNLOADING
+  DURING_ASSEMBLY
+  AT_CUSTOMER_PROPERTY
+  CUSTOMER_REPORTED
+  UNKNOWN
+}
+
+enum DamageReason {
+  PRODUCT_ALREADY_DAMAGED
+  WAREHOUSE_HANDLING
+  INCORRECT_LOADING
+  INSUFFICIENT_PROTECTION
+  PRODUCT_MOVEMENT
+  DRIVER_HANDLING
+  OFFSIDER_HANDLING
+  CUSTOMER_ACCESS_ISSUE
+  STAIRS
+  LIFT_RESTRICTION
+  ASSEMBLY_DAMAGE
+  PACKAGING_FAILURE
+  MANUFACTURING_DEFECT
+  UNKNOWN
+  OTHER
+}
+
+// Responsibility starts UNDETERMINED — the driver's damage report never assigns
+// blame. Only Operations/Admin can set this, and the change is audited.
+enum DamageResponsibility {
+  UNDETERMINED
+  WAREHOUSE
+  SUPPLIER
+  MANUFACTURING
+  DRIVER
+  OFFSIDER
+  TRANSPORT
+  CUSTOMER
+  PACKAGING
+  OTHER
+  NO_RESPONSIBILITY
+}
+
+enum FailureReason {
+  CUSTOMER_NOT_HOME
+  CUSTOMER_REFUSED
+  CANNOT_ACCESS_PROPERTY
+  INCORRECT_ADDRESS
+  CUSTOMER_REQUESTED_RESCHEDULE
+  PRODUCT_DAMAGED
+  PRODUCT_MISSING
+  UNSAFE_ACCESS
+  VEHICLE_ACCESS_RESTRICTION
+  OUTSIDE_WINDOW
+  OTHER
+}
+
+enum PhotoCategory {
+  PRODUCT_DELIVERED
+  PRODUCT_IN_FINAL_LOCATION
+  ASSEMBLY_COMPLETED
+  PACKAGING_REMOVED
+  CUSTOMER_PROPERTY_ACCESS
+  DAMAGE_CLOSEUP
+  DAMAGE_FULL_PRODUCT
+  DAMAGE_PACKAGING
+  DAMAGE_LABEL
+  FAILED_DELIVERY_EVIDENCE
+  OTHER
+}
+
+enum ReceiverRelationship {
+  CUSTOMER
+  FAMILY_MEMBER
+  STAFF
+  RECEPTION
+  OTHER
+}
+
+enum CaseStatus {
+  OPEN
+  INVESTIGATING
+  AWAITING_CUSTOMER
+  AWAITING_OPERATIONS
+  RESOLVED
+  CLOSED
+}
+
+enum AlertType {
+  DELIVERY_DELAYED
+  FAILED_DELIVERY
+  DAMAGE_REPORT
+  LOW_RATING
+  LICENCE_EXPIRY
+  VEHICLE_COMPLIANCE_EXPIRY
+  DRIVER_OFFLINE
+  GEOFENCE_WARNING
+  MISSING_POD
+  ROUTE_LATE
+  CAPACITY_EXCEEDED
+  RETAIL_CLIENT_ISSUE
+  RETURN_SLA_WARNING_24H
+  RETURN_SLA_APPROACHING_48H
+  RETURN_SLA_OVERDUE
+  WAREHOUSE_AUDIT_CRITICAL_FAIL
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum SettlementStatus {
+  DRAFT
+  REVIEW
+  APPROVED
+  PAID
+}
+
+// Every scan attempt is recorded, not just successful ones — a rejected
+// scan (wrong route, already scanned, cancelled order) is itself an
+// operational event worth keeping, not just an error toast the driver sees
+// once. SCANNED is the only outcome that confirms physical collection.
+enum DispatchScanOutcome {
+  SCANNED
+  NOT_FOUND
+  CANCELLED_ORDER
+  MISSING_FROM_ROUTE
+  WRONG_ROUTE
+  DUPLICATE_SCAN
+  ALREADY_DISPATCHED
+}
+
+// ---------------------------------------------------------------------------
+// Organisations & users
+// ---------------------------------------------------------------------------
+
+model Organisation {
+  id             String   @id @default(cuid())
+  companyName    String
+  abn            String?
+  contactName    String?
+  email          String?
+  phone          String?
+  billingDetails String?
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  users                         User[]
+  deliveries                    Delivery[]
+  aiConversations               AiConversation[]
+  rateCards                     RateCard[]
+  fuelLevyRules                 FuelLevyRule[]
+  pricingQuotes                 PricingQuote[]
+  servicingSchedules            ServicingSchedule[]
+  warehouseAudits               WarehouseAudit[]
+  morningCommunicationLogs      MorningCommunicationLog[]
+  clientDriverApprovals         ClientDriverApproval[]
+  clientVehicleApprovals        ClientVehicleApproval[]
+  clientDriverTrainings         ClientDriverTraining[]
+  warehouseRepresentativeShifts WarehouseRepresentativeShift[]
+  runsheetImports               RunsheetImport[]
+
+  @@map("organisations")
+}
+
+model User {
+  id             String        @id @default(cuid())
+  email          String        @unique
+  passwordHash   String
+  name           String
+  phone          String?
+  role           Role          @default(DRIVER)
+  organisationId String?
+  organisation   Organisation? @relation(fields: [organisationId], references: [id])
+  region         String?
+  active         Boolean       @default(true)
+  lastLoginAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  driverProfile                  Driver?
+  driverRoutes                   Route[]                        @relation("DriverRoutes")
+  trackingEvents                 TrackingEvent[]                @relation("EventActor")
+  proofsCaptured                 ProofOfDelivery[]              @relation("PodCapturedBy")
+  createdRoutes                  Route[]                        @relation("RouteCreatedBy")
+  createdDeliveries              Delivery[]                     @relation("DeliveryCreatedBy")
+  damageReports                  DamageReport[]                 @relation("DamageReportedBy")
+  damageResponsibilitySets       DamageReport[]                 @relation("DamageResponsibilitySetBy")
+  failedDeliveryReports          FailedDeliveryReport[]         @relation("FailedReportedBy")
+  deliveryPhotos                 DeliveryPhoto[]                @relation("PhotoUploadedBy")
+  auditLogs                      AuditLog[]
+  openedCases                    CustomerServiceCase[]          @relation("CaseOpenedBy")
+  caseNotes                      CaseNote[]
+  acknowledgedAlerts             Alert[]                        @relation("AlertAcknowledgedBy")
+  resolvedAlerts                 Alert[]                        @relation("AlertResolvedBy")
+  settlementsApproved            Settlement[]                   @relation("SettlementApprovedBy")
+  aiConversations                AiConversation[]
+  aiActivityLogs                 AiActivityLog[]
+  createdRateCards               RateCard[]
+  createdFuelLevyRules           FuelLevyRule[]
+  createdCarrierMappings         CarrierServiceCodeMapping[]
+  pricingQuotesCreated           PricingQuote[]
+  dispatchScansPerformed         DispatchScan[]                 @relation("DispatchScannedBy")
+  returnTasksAsDriver            ReturnTask[]                   @relation("ReturnTaskDriver")
+  returnTasksScannedIn           ReturnTask[]                   @relation("ReturnTaskScannedInBy")
+  returnTasksCreated             ReturnTask[]                   @relation("ReturnTaskCreatedBy")
+  warehouseAuditsAsAuditor       WarehouseAudit[]               @relation("WarehouseAuditAuditor")
+  warehouseAuditsAsDriver        WarehouseAudit[]               @relation("WarehouseAuditDriver")
+  morningCommsAsDriver           MorningCommunicationLog[]      @relation("MorningCommDriver")
+  morningCommsCreated            MorningCommunicationLog[]      @relation("MorningCommCreatedBy")
+  preDeliveryConfirmationsLogged PreDeliveryConfirmation[]
+  clientDriverApprovalsAsDriver  ClientDriverApproval[]         @relation("ClientDriverApprovalDriver")
+  clientDriverTrainingsAsDriver  ClientDriverTraining[]         @relation("ClientDriverTrainingDriver")
+  clientDriverTrainingsApproved  ClientDriverTraining[]         @relation("ClientDriverTrainingApprovedBy")
+  warehouseRepShiftsAsRep        WarehouseRepresentativeShift[] @relation("WarehouseRepShiftRep")
+  warehouseRepShiftsCreated      WarehouseRepresentativeShift[] @relation("WarehouseRepShiftCreatedBy")
+  driverLocations                DriverLocation[]               @relation("DriverLocationDriver")
+  runsheetImportsImported        RunsheetImport[]               @relation("RunsheetImportedBy")
+  runsheetRowsResolved           RunsheetRow[]                  @relation("RunsheetRowResolvedBy")
+
+  @@map("users")
+}
+
+model Driver {
+  id                  String    @id @default(cuid())
+  userId              String    @unique
+  user                User      @relation(fields: [userId], references: [id])
+  licenceNumber       String?
+  licenceExpiry       DateTime? @db.Date
+  licenceDocumentUrl  String?
+  vehicleId           String?
+  vehicle             Vehicle?  @relation(fields: [vehicleId], references: [id])
+  maxCbm              Float?
+  maxWeight           Float?
+  paymentSplitPercent Float     @default(60)
+  rating              Float?
+  active              Boolean   @default(true)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  settlements Settlement[]
+
+  @@map("drivers")
+}
+
+model Vehicle {
+  id                 String    @id @default(cuid())
+  registration       String    @unique
+  type               String
+  make               String?
+  model              String?
+  maxCbm             Float?
+  maxWeight          Float?
+  active             Boolean   @default(true)
+  insuranceExpiry    DateTime? @db.Date
+  registrationExpiry DateTime? @db.Date
+  createdAt          DateTime  @default(now())
+
+  drivers                  Driver[]
+  routes                   Route[]
+  warehouseAudits          WarehouseAudit[]
+  morningCommunicationLogs MorningCommunicationLog[]
+  clientVehicleApprovals   ClientVehicleApproval[]
+
+  @@map("vehicles")
+}
+
+// ---------------------------------------------------------------------------
+// Routes, deliveries, items
+// ---------------------------------------------------------------------------
+
+model Route {
+  id          String      @id @default(cuid())
+  name        String
+  date        DateTime    @db.Date
+  region      String?
+  status      RouteStatus @default(PLANNED)
+  driverId    String?
+  driver      User?       @relation("DriverRoutes", fields: [driverId], references: [id])
+  vehicleId   String?
+  vehicle     Vehicle?    @relation(fields: [vehicleId], references: [id])
+  totalStops  Int         @default(0)
+  totalCbm    Float       @default(0)
+  totalWeight Float       @default(0)
+  startTime   DateTime?
+  finishTime  DateTime?
+  createdById String
+  createdBy   User        @relation("RouteCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  deliveries      Delivery[]
+  dispatchScans   DispatchScan[]
+  driverLocations DriverLocation[]
+
+  @@index([driverId, date])
+  @@index([date])
+  @@map("routes")
+}
+
+model Delivery {
+  id                String  @id @default(cuid())
+  routeId           String?
+  route             Route?  @relation(fields: [routeId], references: [id])
+  sequence          Int     @default(0)
+  trackingCode      String  @unique @default(cuid())
+  externalReference String?
+
+  organisationId String?
+  organisation   Organisation? @relation(fields: [organisationId], references: [id])
+
+  customerName  String
+  customerPhone String?
+  customerEmail String?
+  address       String
+  suburb        String
+  postcode      String
+  state         String  @default("QLD")
+  region        String  @default("QLD")
+  lat           Float?
+  lng           Float?
+
+  deliveryDate DateTime? @db.Date
+  windowStart  DateTime?
+  windowEnd    DateTime?
+
+  numberOfBoxes            Int?
+  cbm                      Float?
+  weight                   Float?
+  assemblyRequired         Boolean @default(false)
+  packagingRemovalRequired Boolean @default(false)
+  specialInstructions      String?
+
+  vehicleId  String?
+  stopNumber Int?
+
+  status DeliveryStatus @default(PENDING)
+
+  baseCharge             Float?
+  cbmCharge              Float?
+  weightCharge           Float?
+  assemblyCharge         Float?
+  packagingRemovalCharge Float?
+  stairsCharge           Float?
+  waitingTimeCharge      Float?
+  redeliveryCharge       Float?
+  regionalSurcharge      Float?
+  otherSurcharge         Float?
+  totalCharge            Float?
+  driverPayment          Float?
+  companyRevenue         Float?
+
+  createdById    String
+  createdBy      User      @relation("DeliveryCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  dispatchedAt   DateTime?
+  routeStartedAt DateTime?
+  arrivedAt      DateTime?
+  deliveredAt    DateTime?
+  failedAt       DateTime?
+  cancelledAt    DateTime?
+
+  items                    DeliveryItem[]
+  photos                   DeliveryPhoto[]
+  trackingEvents           TrackingEvent[]
+  proofOfDelivery          ProofOfDelivery?
+  damageReports            DamageReport[]
+  failedDeliveryReports    FailedDeliveryReport[]
+  customerServiceCases     CustomerServiceCase[]
+  customerRating           CustomerRating?
+  aiConversations          AiConversation[]
+  pricingQuote             PricingQuote?
+  dispatchScans            DispatchScan[]
+  returnTasks              ReturnTask[]
+  morningCommunicationLogs MorningCommunicationLog[]
+  preDeliveryConfirmations PreDeliveryConfirmation[]
+  runsheetRows             RunsheetRow[]
+
+  @@index([status])
+  @@index([trackingCode])
+  @@index([organisationId])
+  @@index([organisationId, status])
+  @@index([routeId])
+  @@index([deliveryDate])
+  @@index([createdAt])
+  @@map("deliveries")
+}
+
+// Configurable per-client (and per-region) delivery days — see
+// lib/servicing.ts. region: "" is the client's default/metro schedule;
+// a named region gets its own row with its own days and an optional
+// minimum order/volume threshold. A client with no row here at all is
+// unrestricted — this only ever adds a constraint on top of the default
+// "any day" behaviour, never removes it for clients that don't need it.
+model ServicingSchedule {
+  id                    String       @id @default(cuid())
+  organisationId        String
+  organisation          Organisation @relation(fields: [organisationId], references: [id])
+  // "" (empty string, the default) = the client's default/metro schedule;
+  // a named region otherwise (e.g. "Cairns"). Not nullable — a nullable
+  // field can't be targeted by Prisma's compound-unique upsert, since NULL
+  // never matches deterministically in a unique constraint at the DB level.
+  region                String       @default("")
+  daysOfWeek            Int[] // 0 = Sunday .. 6 = Saturday
+  minimumOrderThreshold Float?
+  active                Boolean      @default(true)
+  notes                 String?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  @@unique([organisationId, region])
+  @@map("servicing_schedules")
+}
+
+// Weekly warehouse driver compliance audit — uniform/PPE, standard
+// equipment, and vehicle condition, per client or run generally.
+// `critical` is set per item at audit time (not hard-coded per category)
+// since the brief doesn't say which specific items are safety-critical for
+// a given client; the UI defaults PPE-related items to critical as a
+// suggestion, not a settled policy. A FAIL on a critical item raises an
+// Alert immediately.
+enum WarehouseAuditCategory {
+  COMPANY_UNIFORM
+  VISIBLE_LOGO
+  SAFETY_VEST_PPE
+  SAFETY_SHOES
+  STANDARD_TOOLS
+  FURNITURE_BLANKETS
+  STRAPS_TIE_DOWNS
+  TROLLEY
+  DRILL_TOOLS
+  VACUUM
+  CLEANING_PRODUCTS
+  VEHICLE_CLEANLINESS
+  VEHICLE_CONDITION
+  REQUIRED_DOCUMENTATION
+}
+
+enum AuditItemResult {
+  PASS
+  FAIL
+  NOT_APPLICABLE
+}
+
+model WarehouseAudit {
+  id             String        @id @default(cuid())
+  organisationId String? // optional client scope (e.g. Koala) — null = general audit
+  organisation   Organisation? @relation(fields: [organisationId], references: [id])
+  auditorId      String
+  auditor        User          @relation("WarehouseAuditAuditor", fields: [auditorId], references: [id])
+  driverId       String
+  driver         User          @relation("WarehouseAuditDriver", fields: [driverId], references: [id])
+  vehicleId      String?
+  vehicle        Vehicle?      @relation(fields: [vehicleId], references: [id])
+  auditedAt      DateTime      @default(now())
+  notes          String?
+  createdAt      DateTime      @default(now())
+
+  items WarehouseAuditItem[]
+
+  @@index([driverId])
+  @@index([auditedAt])
+  @@map("warehouse_audits")
+}
+
+model WarehouseAuditItem {
+  id               String                 @id @default(cuid())
+  warehouseAuditId String
+  warehouseAudit   WarehouseAudit         @relation(fields: [warehouseAuditId], references: [id], onDelete: Cascade)
+  category         WarehouseAuditCategory
+  result           AuditItemResult
+  critical         Boolean                @default(false)
+  photoUrl         String?
+  correctiveAction String?
+  dueDate          DateTime?
+  resolved         Boolean                @default(false)
+  resolvedAt       DateTime?
+
+  @@map("warehouse_audit_items")
+}
+
+// Morning warehouse communication log — overnight exceptions, damaged/
+// missing stock, driver and customer issues raised before the day's runs
+// start. `responsiblePerson` is free text, not a User relation: whoever's
+// accountable for follow-up isn't necessarily a NexaMove system user (could
+// be a Koala warehouse contact), so forcing a system-account link would be
+// wrong more often than it'd help.
+enum MorningCommIssueType {
+  WAREHOUSE_ISSUE
+  DELIVERY_INCIDENT
+  DAMAGED_GOODS
+  RETURNED_STOCK
+  ITEMS_RECEIVED
+  MISSING_STOCK
+  OVERNIGHT_EXCEPTION
+  CUSTOMER_COMPLAINT
+  DRIVER_ISSUE
+  OTHER
+}
+
+enum MorningCommStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+model MorningCommunicationLog {
+  id                String               @id @default(cuid())
+  organisationId    String? // optional client scope (e.g. Koala) — null = general
+  organisation      Organisation?        @relation(fields: [organisationId], references: [id])
+  date              DateTime             @db.Date
+  issueType         MorningCommIssueType
+  deliveryId        String?
+  delivery          Delivery?            @relation(fields: [deliveryId], references: [id])
+  driverId          String?
+  driver            User?                @relation("MorningCommDriver", fields: [driverId], references: [id])
+  vehicleId         String?
+  vehicle           Vehicle?             @relation(fields: [vehicleId], references: [id])
+  description       String
+  actionRequired    String?
+  responsiblePerson String?
+  status            MorningCommStatus    @default(OPEN)
+  attachmentUrl     String?
+  createdById       String
+  createdBy         User                 @relation("MorningCommCreatedBy", fields: [createdById], references: [id])
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@index([date])
+  @@index([status])
+  @@map("morning_communication_logs")
+}
+
+// Dedicated fleet / driver-vehicle approval, per client — never a global
+// "Koala driver" flag on Driver/Vehicle, since the same driver or vehicle
+// might be approved for one client and not another. approved gates whether
+// dispatch warns on assignment (see app/api/dispatch/assign); dedicated
+// marks the driver/vehicle as reserved for that client's own fleet rather
+// than the general pool; primary/backup distinguishes within a client's
+// dedicated set. Emergency substitute drivers are never blocked, only
+// warned — dispatch always allows an authorised override.
+model ClientDriverApproval {
+  id               String       @id @default(cuid())
+  organisationId   String
+  organisation     Organisation @relation(fields: [organisationId], references: [id])
+  driverId         String
+  driver           User         @relation("ClientDriverApprovalDriver", fields: [driverId], references: [id])
+  approved         Boolean      @default(false)
+  dedicated        Boolean      @default(false)
+  primaryDriver    Boolean      @default(false)
+  active           Boolean      @default(true)
+  complianceStatus String?
+  notes            String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@unique([organisationId, driverId])
+  @@map("client_driver_approvals")
+}
+
+model ClientVehicleApproval {
+  id             String       @id @default(cuid())
+  organisationId String
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+  vehicleId      String
+  vehicle        Vehicle      @relation(fields: [vehicleId], references: [id])
+  approved       Boolean      @default(false)
+  dedicated      Boolean      @default(false)
+  preferred      Boolean      @default(false)
+  active         Boolean      @default(true)
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organisationId, vehicleId])
+  @@map("client_vehicle_approvals")
+}
+
+// Client product/competency training — separate from general driver
+// compliance (licence etc., already on Driver) since this is specific to
+// one client's product/process, not the driver's general fitness to drive.
+enum ClientTrainingType {
+  INDUCTION
+  PRODUCT_HANDLING
+  ASSEMBLY
+  CUSTOMER_SERVICE
+}
+
+model ClientDriverTraining {
+  id             String             @id @default(cuid())
+  organisationId String
+  organisation   Organisation       @relation(fields: [organisationId], references: [id])
+  driverId       String
+  driver         User               @relation("ClientDriverTrainingDriver", fields: [driverId], references: [id])
+  trainingType   ClientTrainingType
+  completedAt    DateTime           @db.Date
+  expiresAt      DateTime?          @db.Date
+  documentUrl    String?
+  approvedById   String?
+  approvedBy     User?              @relation("ClientDriverTrainingApprovedBy", fields: [approvedById], references: [id])
+  createdAt      DateTime           @default(now())
+
+  @@index([organisationId, driverId])
+  @@map("client_driver_trainings")
+}
+
+// A designated logistics representative present during collections — not a
+// payroll system, just who/where/when and a check-in/out timestamp pair.
+model WarehouseRepresentativeShift {
+  id               String        @id @default(cuid())
+  organisationId   String?
+  organisation     Organisation? @relation(fields: [organisationId], references: [id])
+  representativeId String
+  representative   User          @relation("WarehouseRepShiftRep", fields: [representativeId], references: [id])
+  warehouse        String
+  date             DateTime      @db.Date
+  shift            String
+  checkInAt        DateTime?
+  checkOutAt       DateTime?
+  notes            String?
+  createdById      String
+  createdBy        User          @relation("WarehouseRepShiftCreatedBy", fields: [createdById], references: [id])
+  createdAt        DateTime      @default(now())
+
+  @@index([date])
+  @@map("warehouse_representative_shifts")
+}
+
+// Continuous driver location, for live tracking + ETA — deliberately NOT
+// written on every GPS reading. The driver's browser polls
+// navigator.geolocation and only POSTs when the position has moved past a
+// distance/time threshold (see lib/gpsTracking.ts), per the brief's
+// explicit "do not cause unnecessary database writes every few seconds if
+// the driver has not meaningfully moved." Only the latest row per driver
+// matters operationally; history is kept for now (route replay / audit)
+// but isn't pruned automatically — a real retention job is a documented
+// follow-up, not implemented here since no retention policy was supplied.
+model DriverLocation {
+  id         String   @id @default(cuid())
+  driverId   String
+  driver     User     @relation("DriverLocationDriver", fields: [driverId], references: [id])
+  routeId    String?
+  route      Route?   @relation(fields: [routeId], references: [id])
+  lat        Float
+  lng        Float
+  accuracy   Float?
+  recordedAt DateTime @default(now())
+
+  @@index([driverId, recordedAt])
+  @@index([routeId, recordedAt])
+  @@map("driver_locations")
+}
+
+// Collection/exchange return tracking — a job that involves taking goods
+// back from a customer (a swap-over, an exchange, a straight collection)
+// must have those goods scanned in at the warehouse within 48 hours. The
+// clock starts at DRIVER_POSSESSION (the moment the driver actually has the
+// goods in hand) rather than the original booking/job time, since that's
+// the one unambiguous, driver-logged event — "48 hours of the booking/job
+// requirement" in the brief could also mean the scheduled job time itself,
+// so this is flagged as an assumption to confirm with Koala, not a settled
+// rule (see lib/returns.ts).
+enum ReturnTaskStatus {
+  CUSTOMER_COLLECTION
+  DRIVER_POSSESSION
+  IN_TRANSIT_TO_WAREHOUSE
+  WAREHOUSE_RETURNED
+  SCANNED_IN
+  CLOSED
+}
+
+model ReturnTask {
+  id         String           @id @default(cuid())
+  deliveryId String
+  delivery   Delivery         @relation(fields: [deliveryId], references: [id])
+  status     ReturnTaskStatus @default(CUSTOMER_COLLECTION)
+
+  driverId String?
+  driver   User?   @relation("ReturnTaskDriver", fields: [driverId], references: [id])
+
+  collectedAt         DateTime? // DRIVER_POSSESSION reached — starts the SLA clock
+  slaDeadline         DateTime? // collectedAt + 48h
+  inTransitAt         DateTime?
+  warehouseReturnedAt DateTime?
+  scannedInAt         DateTime?
+  scannedInById       String?
+  scannedInBy         User?     @relation("ReturnTaskScannedInBy", fields: [scannedInById], references: [id])
+  closedAt            DateTime?
+
+  warehouse String?
+  notes     String?
+
+  createdById String
+  createdBy   User     @relation("ReturnTaskCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items ReturnTaskItem[]
+
+  @@index([deliveryId])
+  @@index([status])
+  @@index([slaDeadline])
+  @@map("return_tasks")
+}
+
+// Individual items being returned, tracked separately from the delivery's
+// own DeliveryItem rows since a return may cover only some items from the
+// original job (e.g. one piece of an exchange, not the whole order).
+model ReturnTaskItem {
+  id           String     @id @default(cuid())
+  returnTaskId String
+  returnTask   ReturnTask @relation(fields: [returnTaskId], references: [id], onDelete: Cascade)
+  description  String
+  sku          String?
+  quantity     Int        @default(1)
+  condition    String?
+
+  @@map("return_task_items")
+}
+
+// A physical warehouse scan of a delivery's consignment/order barcode at
+// collection — this, not assignment, is what confirms a delivery was
+// actually loaded ("physical scan = dispatch confirmation", per the Koala
+// dispatch-integrity requirement). A DB-level partial unique index
+// (dispatch_scans_one_success_per_delivery_idx, added by migration, not
+// representable in this schema file) additionally guarantees only one
+// SCANNED-outcome row can ever exist per delivery, so a duplicate scan is
+// rejected even under a race, not just checked in application code.
+model DispatchScan {
+  id          String              @id @default(cuid())
+  scannedCode String
+  deliveryId  String?
+  delivery    Delivery?           @relation(fields: [deliveryId], references: [id])
+  routeId     String?
+  route       Route?              @relation(fields: [routeId], references: [id])
+  scannedById String
+  scannedBy   User                @relation("DispatchScannedBy", fields: [scannedById], references: [id])
+  warehouse   String?
+  device      String?
+  outcome     DispatchScanOutcome
+  scannedAt   DateTime            @default(now())
+
+  @@index([deliveryId])
+  @@index([routeId, scannedAt])
+  @@map("dispatch_scans")
+}
+
+// Pre-delivery customer contact record — every attempt is its own row
+// (never a single mutable flag), so "who contacted the customer, when, how,
+// and what did they say" stays a real audit trail. A delivery's current
+// confirmation status is the latest row for that delivery, not a
+// duplicated column on Delivery itself.
+enum PreDeliveryConfirmationStatus {
+  NOT_CONTACTED
+  CONTACT_ATTEMPTED
+  CONFIRMED
+  UNABLE_TO_CONTACT
+  DETAILS_CHANGED
+}
+
+enum ContactChannel {
+  PHONE
+  SMS
+  EMAIL
+  IN_PERSON
+  OTHER
+}
+
+model PreDeliveryConfirmation {
+  id               String                        @id @default(cuid())
+  deliveryId       String
+  delivery         Delivery                      @relation(fields: [deliveryId], references: [id])
+  status           PreDeliveryConfirmationStatus
+  channel          ContactChannel
+  notes            String?
+  customerResponse String?
+  staffId          String
+  staff            User                          @relation(fields: [staffId], references: [id])
+  createdAt        DateTime                      @default(now())
+
+  @@index([deliveryId, createdAt])
+  @@map("pre_delivery_confirmations")
+}
+
+model DeliveryItem {
+  id                 String     @id @default(cuid())
+  deliveryId         String
+  delivery           Delivery   @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  sku                String?
+  productDescription String
+  quantity           Int        @default(1)
+  boxes              Int?
+  cbm                Float?
+  weight             Float?
+  fragile            Boolean    @default(false)
+  assemblyRequired   Boolean    @default(false)
+  itemStatus         ItemStatus @default(PENDING)
+
+  @@map("delivery_items")
+}
+
+model DeliveryPhoto {
+  id           String        @id @default(cuid())
+  deliveryId   String
+  delivery     Delivery      @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  url          String
+  category     PhotoCategory
+  uploadedById String
+  uploadedBy   User          @relation("PhotoUploadedBy", fields: [uploadedById], references: [id])
+  gpsLat       Float?
+  gpsLng       Float?
+  uploadedAt   DateTime      @default(now())
+
+  @@index([deliveryId])
+  @@map("delivery_photos")
+}
+
+// ---------------------------------------------------------------------------
+// Tracking, proof of delivery, damage, failed delivery
+// ---------------------------------------------------------------------------
+
+model TrackingEvent {
+  id         String            @id @default(cuid())
+  deliveryId String
+  delivery   Delivery          @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  type       TrackingEventType
+  oldStatus  DeliveryStatus?
+  newStatus  DeliveryStatus?
+  lat        Float?
+  lng        Float?
+  device     String?
+  note       String?
+  actorId    String?
+  actor      User?             @relation("EventActor", fields: [actorId], references: [id])
+  createdAt  DateTime          @default(now())
+
+  @@index([deliveryId, createdAt])
+  @@map("tracking_events")
+}
+
+model ProofOfDelivery {
+  id         String   @id @default(cuid())
+  deliveryId String   @unique
+  delivery   Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  signatureUrl             String?
+  receiverName             String?
+  receiverRelationship     ReceiverRelationship?
+  signatureExceptionReason String?
+  contactless              Boolean               @default(false)
+
+  assemblyCompleted Boolean @default(false)
+  packagingRemoved  Boolean @default(false)
+
+  gpsLat                 Float
+  gpsLng                 Float
+  gpsAccuracyM           Float?
+  geofenceVerified       Boolean?
+  geofenceOverrideReason String?
+
+  capturedById String
+  capturedBy   User     @relation("PodCapturedBy", fields: [capturedById], references: [id])
+  capturedAt   DateTime @default(now())
+
+  @@map("proof_of_deliveries")
+}
+
+model DamageReport {
+  id         String   @id @default(cuid())
+  deliveryId String
+  delivery   Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  itemId     String?
+
+  discoveredStage DamageStage
+  reason          DamageReason
+  description     String
+
+  reportedById String
+  reportedBy   User   @relation("DamageReportedBy", fields: [reportedById], references: [id])
+  gpsLat       Float?
+  gpsLng       Float?
+
+  responsibility        DamageResponsibility @default(UNDETERMINED)
+  responsibilitySetById String?
+  responsibilitySetBy   User?                @relation("DamageResponsibilitySetBy", fields: [responsibilitySetById], references: [id])
+  responsibilitySetAt   DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([deliveryId])
+  @@map("damage_reports")
+}
+
+model FailedDeliveryReport {
+  id           String        @id @default(cuid())
+  deliveryId   String
+  delivery     Delivery      @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  reason       FailureReason
+  notes        String?
+  gpsLat       Float?
+  gpsLng       Float?
+  photoUrl     String?
+  reportedById String
+  reportedBy   User          @relation("FailedReportedBy", fields: [reportedById], references: [id])
+  createdAt    DateTime      @default(now())
+
+  @@index([deliveryId])
+  @@map("failed_delivery_reports")
+}
+
+// ---------------------------------------------------------------------------
+// Customer service, alerts, ratings, audit, settlements
+// ---------------------------------------------------------------------------
+
+model CustomerServiceCase {
+  id         String     @id @default(cuid())
+  deliveryId String
+  delivery   Delivery   @relation(fields: [deliveryId], references: [id])
+  status     CaseStatus @default(OPEN)
+  openedById String
+  openedBy   User       @relation("CaseOpenedBy", fields: [openedById], references: [id])
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  notes CaseNote[]
+
+  @@index([deliveryId])
+  @@map("customer_service_cases")
+}
+
+model CaseNote {
+  id        String              @id @default(cuid())
+  caseId    String
+  case      CustomerServiceCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User                @relation(fields: [authorId], references: [id])
+  note      String
+  createdAt DateTime            @default(now())
+
+  @@map("case_notes")
+}
+
+model Alert {
+  id               String      @id @default(cuid())
+  type             AlertType
+  status           AlertStatus @default(OPEN)
+  message          String
+  deliveryId       String?
+  driverId         String?
+  createdAt        DateTime    @default(now())
+  acknowledgedById String?
+  acknowledgedBy   User?       @relation("AlertAcknowledgedBy", fields: [acknowledgedById], references: [id])
+  acknowledgedAt   DateTime?
+  resolvedById     String?
+  resolvedBy       User?       @relation("AlertResolvedBy", fields: [resolvedById], references: [id])
+  resolvedAt       DateTime?
+
+  @@index([status])
+  @@map("alerts")
+}
+
+model CustomerRating {
+  id                  String   @id @default(cuid())
+  deliveryId          String   @unique
+  delivery            Delivery @relation(fields: [deliveryId], references: [id])
+  stars               Int
+  driverRating        Int?
+  communicationRating Int?
+  careRating          Int?
+  comment             String?
+  createdAt           DateTime @default(now())
+
+  @@map("customer_ratings")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  action      String
+  recordType  String
+  recordId    String?
+  beforeValue String?
+  afterValue  String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  @@index([recordType, recordId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Settlement {
+  id           String           @id @default(cuid())
+  driverId     String
+  driver       Driver           @relation(fields: [driverId], references: [id])
+  periodStart  DateTime         @db.Date
+  periodEnd    DateTime         @db.Date
+  status       SettlementStatus @default(DRAFT)
+  grossAmount  Float            @default(0)
+  driverShare  Float            @default(0)
+  companyShare Float            @default(0)
+  createdAt    DateTime         @default(now())
+  approvedById String?
+  approvedBy   User?            @relation("SettlementApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+  paidAt       DateTime?
+
+  @@index([driverId, periodStart])
+  @@map("settlements")
+}
+
+// Singleton row (id always "default") holding admin-configurable settings.
+model AppSettings {
+  id                        String   @id @default("default")
+  companyName               String   @default("NexaMove")
+  abn                       String?
+  contactEmail              String?
+  regions                   String   @default("QLD")
+  geofenceRadiusMetres      Int      @default(300)
+  photoRequiredForDelivery  Boolean  @default(true)
+  signatureRequired         Boolean  @default(true)
+  defaultDriverSplitPercent Float    @default(60)
+  gstPercentage             Float    @default(10)
+  updatedAt                 DateTime @updatedAt
+
+  @@map("app_settings")
+}
+
+// Schema-ready for Phase 4 (SMS/email) — populated once a provider is configured.
+model NotificationLog {
+  id                String   @id @default(cuid())
+  deliveryId        String?
+  channel           String
+  recipient         String
+  notificationType  String
+  status            String
+  providerMessageId String?
+  sentAt            DateTime @default(now())
+
+  @@map("notification_logs")
+}
+
+// ---------------------------------------------------------------------------
+// AI assistants (Operations AI + Customer AI) — schema-ready, populated once
+// OPENAI_API_KEY is configured. See lib/ai/.
+// ---------------------------------------------------------------------------
+
+enum AiConversationKind {
+  OPERATIONS
+  CUSTOMER
+}
+
+enum AiMessageRole {
+  USER
+  ASSISTANT
+  TOOL
+}
+
+model AiConversation {
+  id             String             @id @default(cuid())
+  kind           AiConversationKind
+  userId         String?
+  user           User?              @relation(fields: [userId], references: [id])
+  organisationId String?
+  organisation   Organisation?      @relation(fields: [organisationId], references: [id])
+  deliveryId     String?
+  delivery       Delivery?          @relation(fields: [deliveryId], references: [id])
+  title          String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  messages    AiMessage[]
+  activityLog AiActivityLog[]
+
+  @@index([userId])
+  @@index([deliveryId])
+  @@map("ai_conversations")
+}
+
+model AiMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           AiMessageRole
+  content        String
+  toolName       String?
+  createdAt      DateTime       @default(now())
+
+  @@index([conversationId, createdAt])
+  @@map("ai_messages")
+}
+
+// Append-only log of every AI tool call and chat turn — separate from
+// AuditLog (which covers direct human actions) so AI activity can be
+// reviewed/rate-limited independently. Never store hidden chain-of-thought,
+// only the request, the final response, and tool metadata.
+model AiActivityLog {
+  id                        String          @id @default(cuid())
+  conversationId            String?
+  conversation              AiConversation? @relation(fields: [conversationId], references: [id])
+  userId                    String?
+  user                      User?           @relation(fields: [userId], references: [id])
+  role                      Role?
+  organisationId            String?
+  ipAddress                 String?
+  userRequest               String?
+  action                    String
+  toolsCalled               String?
+  affectedRecordIds         String?
+  readOnly                  Boolean         @default(true)
+  humanConfirmationRequired Boolean         @default(false)
+  resultSummary             String?
+  model                     String?
+  tokensUsed                Int?
+  errorMessage              String?
+  createdAt                 DateTime        @default(now())
+
+  @@index([userId, createdAt])
+  @@index([ipAddress, createdAt])
+  @@map("ai_activity_log")
+}
+
+// ---------------------------------------------------------------------------
+// Pricing engine — rate-card based delivery pricing (CBM band + zone +
+// service type + extras -> fuel levy -> GST). See lib/pricing/engine.ts for
+// the single source of truth used by the calculator, delivery creation, and
+// margin/KPI reporting alike. Records seeded with real supplied rate-card
+// figures are `needsConfirmation: false`; anything without confirmed source
+// data (zones, extras, carrier-code mappings) seeds as `true` and must be
+// filled in by an admin — never guessed.
+// ---------------------------------------------------------------------------
+
+model ServiceType {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  label     String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  cbmBands        CbmBand[]
+  rateCardLines   RateCardLine[]
+  carrierMappings CarrierServiceCodeMapping[]
+  quotes          PricingQuote[]
+
+  @@map("service_types")
+}
+
+// A CBM band is scoped to one service type, since Small Goods and Standard
+// use entirely different bracket structures on the same rate card. Matching
+// rule (see resolveCbmBand in the engine): the first band, sorted ascending
+// by maxCbm, where cbm <= maxCbm — so 0.400 falls in a 0–0.4 band, and a
+// 15+ open-ended top band has maxCbm = null.
+model CbmBand {
+  id            String      @id @default(cuid())
+  serviceTypeId String
+  serviceType   ServiceType @relation(fields: [serviceTypeId], references: [id])
+  minCbm        Float
+  maxCbm        Float? // null = open-ended top band ("15+")
+  label         String
+  sortOrder     Int
+
+  rateCardLines RateCardLine[]
+  quotes        PricingQuote[]
+
+  @@index([serviceTypeId, sortOrder])
+  @@map("cbm_bands")
+}
+
+// organisationId set = a client-specific rate card (highest resolution
+// priority). Null organisationId + a state = the state default. Null
+// organisation and null state with isDefault = the company-wide fallback.
+model RateCard {
+  id             String        @id @default(cuid())
+  name           String
+  state          String?
+  organisationId String?
+  organisation   Organisation? @relation(fields: [organisationId], references: [id])
+  isDefault      Boolean       @default(false)
+  active         Boolean       @default(true)
+  effectiveFrom  DateTime      @default(now())
+  effectiveTo    DateTime?
+  createdById    String?
+  createdBy      User?         @relation(fields: [createdById], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  lines                RateCardLine[]
+  zonesUsingAsOverride DeliveryZone[] @relation("ZoneOverrideRateCard")
+  fuelLevyRules        FuelLevyRule[]
+  quotes               PricingQuote[]
+
+  @@index([state])
+  @@index([organisationId])
+  @@map("rate_cards")
+}
+
+model RateCardLine {
+  id                String      @id @default(cuid())
+  rateCardId        String
+  rateCard          RateCard    @relation(fields: [rateCardId], references: [id], onDelete: Cascade)
+  serviceTypeId     String
+  serviceType       ServiceType @relation(fields: [serviceTypeId], references: [id])
+  cbmBandId         String
+  cbmBand           CbmBand     @relation(fields: [cbmBandId], references: [id])
+  price             Float?
+  needsConfirmation Boolean     @default(false)
+
+  @@unique([rateCardId, serviceTypeId, cbmBandId])
+  @@map("rate_card_lines")
+}
+
+enum ZoneAdjustmentModel {
+  NONE
+  FIXED_TABLE
+  FIXED_SURCHARGE
+  MULTIPLIER
+  CLIENT_NEGOTIATED
+}
+
+model DeliveryZone {
+  id                 String              @id @default(cuid())
+  code               String              @unique
+  name               String
+  state              String
+  postcodes          String?
+  active             Boolean             @default(true)
+  adjustmentModel    ZoneAdjustmentModel @default(NONE)
+  fixedSurcharge     Float?
+  multiplier         Float?
+  minimumCharge      Float?
+  overrideRateCardId String?
+  overrideRateCard   RateCard?           @relation("ZoneOverrideRateCard", fields: [overrideRateCardId], references: [id])
+  needsConfirmation  Boolean             @default(true)
+  notes              String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  quotes PricingQuote[]
+
+  @@map("delivery_zones")
+}
+
+model FuelLevyRule {
+  id             String        @id @default(cuid())
+  organisationId String?
+  organisation   Organisation? @relation(fields: [organisationId], references: [id])
+  state          String?
+  rateCardId     String?
+  rateCard       RateCard?     @relation(fields: [rateCardId], references: [id])
+  percentage     Float
+  effectiveFrom  DateTime      @default(now())
+  effectiveTo    DateTime?
+  active         Boolean       @default(true)
+  createdById    String?
+  createdBy      User?         @relation(fields: [createdById], references: [id])
+  createdAt      DateTime      @default(now())
+
+  @@map("fuel_levies")
+}
+
+enum ExtraAmountType {
+  FIXED
+  PER_HOUR
+  PER_CBM
+}
+
+model PricingExtra {
+  id                String          @id @default(cuid())
+  code              String          @unique
+  label             String
+  amountType        ExtraAmountType @default(FIXED)
+  amount            Float?
+  taxable           Boolean         @default(true)
+  active            Boolean         @default(true)
+  needsConfirmation Boolean         @default(true)
+  updatedAt         DateTime        @updatedAt
+
+  @@map("pricing_extras")
+}
+
+// Imported carrier codes (e.g. "Del Stand", "Ex Small") are never
+// auto-interpreted — they seed unconfirmed with only a suggested label, and
+// an admin must explicitly confirm the mapped ServiceType before the
+// Invoice Analyser will use them with full confidence.
+model CarrierServiceCodeMapping {
+  id             String       @id @default(cuid())
+  sourceCode     String       @unique
+  serviceTypeId  String?
+  serviceType    ServiceType? @relation(fields: [serviceTypeId], references: [id])
+  suggestedLabel String?
+  confirmed      Boolean      @default(false)
+  createdById    String?
+  createdBy      User?        @relation(fields: [createdById], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@map("carrier_service_code_mappings")
+}
+
+// Third-party portal workflow (Part D): a runsheet exported from a partner's
+// own delivery portal (e.g. Koala Living's), imported so its rows can be
+// matched against NexaMove's own Delivery records and later reconciled
+// against what the portal reports as paid/settled. No partner's actual
+// export format was supplied, so parsing uses the same loose,
+// keyword-matched column aliasing as the Invoice Analyser
+// (lib/pricing/invoiceAnalyser.ts) rather than a hardcoded layout — see
+// lib/thirdPartyPortal/runsheetImport.ts. Matching is exact-only
+// (tracking code, external reference, or name+postcode); nothing is ever
+// fuzzy-guessed into a match.
+model RunsheetImport {
+  id             String        @id @default(cuid())
+  organisationId String?
+  organisation   Organisation? @relation(fields: [organisationId], references: [id])
+  source         String
+  fileName       String
+  importedById   String
+  importedBy     User          @relation("RunsheetImportedBy", fields: [importedById], references: [id])
+  importedAt     DateTime      @default(now())
+  totalRows      Int
+  matchedRows    Int
+  unmatchedRows  Int
+
+  rows RunsheetRow[]
+
+  @@index([organisationId, importedAt])
+  @@map("runsheet_imports")
+}
+
+model RunsheetRow {
+  id               String         @id @default(cuid())
+  runsheetImportId String
+  runsheetImport   RunsheetImport @relation(fields: [runsheetImportId], references: [id], onDelete: Cascade)
+
+  rawData           Json
+  externalReference String?
+  matchType         String?
+  deliveryId        String?
+  delivery          Delivery? @relation(fields: [deliveryId], references: [id])
+  portalStatus      String?
+  portalAmount      Float?
+  scheduledDate     DateTime? @db.Date
+
+  // Computed at import time by comparing portalAmount/portalStatus against
+  // the matched delivery's own totalCharge/status — never a fabricated
+  // "correct" figure, only a flag for a human to check.
+  reconciliationStatus String    @default("PENDING")
+  varianceAmount       Float?
+  resolvedById         String?
+  resolvedBy           User?     @relation("RunsheetRowResolvedBy", fields: [resolvedById], references: [id])
+  resolvedAt           DateTime?
+  resolutionNotes      String?
+
+  createdAt DateTime @default(now())
+
+  @@index([runsheetImportId])
+  @@index([deliveryId])
+  @@index([reconciliationStatus])
+  @@map("runsheet_rows")
+}
+
+// A saved calculator result — the full breakdown snapshot plus which rate
+// card/rule produced it, so a quote remains explainable even after the
+// underlying rate card is later edited. Optionally linked to a real Delivery
+// once converted.
+model PricingQuote {
+  id             String        @id @default(cuid())
+  quoteNumber    String        @unique
+  organisationId String?
+  organisation   Organisation? @relation(fields: [organisationId], references: [id])
+  deliveryId     String?       @unique
+  delivery       Delivery?     @relation(fields: [deliveryId], references: [id])
+
+  state          String
+  originPostcode String?
+  destPostcode   String
+  zoneId         String?
+  zone           DeliveryZone? @relation(fields: [zoneId], references: [id])
+  serviceTypeId  String
+  serviceType    ServiceType   @relation(fields: [serviceTypeId], references: [id])
+  cbmBandId      String?
+  cbmBand        CbmBand?      @relation(fields: [cbmBandId], references: [id])
+
+  cbm                   Float
+  weight                Float?
+  quantity              Int?
+  assemblyRequired      Boolean @default(false)
+  stairs                Boolean @default(false)
+  additionalLabourHours Float?
+  otherSurcharge        Float   @default(0)
+
+  baseRate       Float
+  zoneAdjustment Float @default(0)
+  assemblyCharge Float @default(0)
+  otherExtras    Float @default(0)
+  nettCharge     Float
+
+  fuelLevyPercentage Float
+  fuelLevyAmount     Float
+  gstPercentage      Float
+  gstAmount          Float
+  totalPrice         Float
+
+  rateCardId           String?
+  rateCard             RateCard? @relation(fields: [rateCardId], references: [id])
+  rateCardNameSnapshot String
+  ruleIdSnapshot       String
+
+  driverPaymentPercent Float
+  driverPayment        Float
+  companyMargin        Float
+
+  currentCarrierPrice Float?
+
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@map("pricing_quotes")
+}
