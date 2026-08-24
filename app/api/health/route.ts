@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+// Without this, Next statically optimizes this route (no dynamic APIs used)
+// and executes GET exactly once at build time, baking that single result
+// in forever — an uptime monitor would keep seeing the build-time snapshot,
+// never the database's actual current state.
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     await prisma.$queryRaw`SELECT 1`;
