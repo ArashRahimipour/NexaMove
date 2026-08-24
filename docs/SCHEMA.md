@@ -52,8 +52,18 @@ plain SQL — reviewable, and applied with `npx prisma migrate deploy`.
   with before/after values.
 - **AppSettings** — singleton row of admin-configurable settings (geofence
   radius, photo/signature requirements, default driver split, regions).
-- **NotificationLog** — schema-ready for Phase 4 (SMS/email); stays empty
-  until a provider is configured.
+- **NotificationLog** — every customer SMS/email attempt (tracking link,
+  delivery confirmation, delivery failure), whether it actually sent or was
+  skipped because Twilio/Resend aren't configured — see
+  lib/notifications/.
+- **RunsheetImport** / **RunsheetRow** — a runsheet exported from a
+  third-party partner portal (e.g. Koala Living's), imported and matched
+  against NexaMove's own Delivery records by exact tracking code, order
+  reference, or name+postcode only (never a fuzzy guess). Each matched row
+  is reconciled against NexaMove's own `totalCharge` for that delivery;
+  anything beyond rounding tolerance is flagged `VARIANCE` for a human to
+  resolve, and an unmatched row stays `UNMATCHED` rather than being forced
+  onto the nearest delivery. See lib/thirdPartyPortal/runsheetImport.ts.
 
 ## The delivery status state machine
 

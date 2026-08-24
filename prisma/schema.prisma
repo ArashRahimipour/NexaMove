@@ -254,6 +254,7 @@ model Organisation {
   clientVehicleApprovals        ClientVehicleApproval[]
   clientDriverTrainings         ClientDriverTraining[]
   warehouseRepresentativeShifts WarehouseRepresentativeShift[]
+  runsheetImports               RunsheetImport[]
 
   @@map("organisations")
 }
@@ -310,6 +311,8 @@ model User {
   warehouseRepShiftsAsRep        WarehouseRepresentativeShift[] @relation("WarehouseRepShiftRep")
   warehouseRepShiftsCreated      WarehouseRepresentativeShift[] @relation("WarehouseRepShiftCreatedBy")
   driverLocations                DriverLocation[]               @relation("DriverLocationDriver")
+  runsheetImportsImported        RunsheetImport[]               @relation("RunsheetImportedBy")
+  runsheetRowsResolved           RunsheetRow[]                  @relation("RunsheetRowResolvedBy")
 
   @@map("users")
 }
@@ -468,6 +471,7 @@ model Delivery {
   returnTasks              ReturnTask[]
   morningCommunicationLogs MorningCommunicationLog[]
   preDeliveryConfirmations PreDeliveryConfirmation[]
+  runsheetRows             RunsheetRow[]
 
   @@index([status])
   @@index([trackingCode])
@@ -1389,6 +1393,67 @@ model CarrierServiceCodeMapping {
   updatedAt      DateTime     @updatedAt
 
   @@map("carrier_service_code_mappings")
+}
+
+// Third-party portal workflow (Part D): a runsheet exported from a partner's
+// own delivery portal (e.g. Koala Living's), imported so its rows can be
+// matched against NexaMove's own Delivery records and later reconciled
+// against what the portal reports as paid/settled. No partner's actual
+// export format was supplied, so parsing uses the same loose,
+// keyword-matched column aliasing as the Invoice Analyser
+// (lib/pricing/invoiceAnalyser.ts) rather than a hardcoded layout — see
+// lib/thirdPartyPortal/runsheetImport.ts. Matching is exact-only
+// (tracking code, external reference, or name+postcode); nothing is ever
+// fuzzy-guessed into a match.
+model RunsheetImport {
+  id             String        @id @default(cuid())
+  organisationId String?
+  organisation   Organisation? @relation(fields: [organisationId], references: [id])
+  source         String
+  fileName       String
+  importedById   String
+  importedBy     User          @relation("RunsheetImportedBy", fields: [importedById], references: [id])
+  importedAt     DateTime      @default(now())
+  totalRows      Int
+  matchedRows    Int
+  unmatchedRows  Int
+
+  rows RunsheetRow[]
+
+  @@index([organisationId, importedAt])
+  @@map("runsheet_imports")
+}
+
+model RunsheetRow {
+  id               String         @id @default(cuid())
+  runsheetImportId String
+  runsheetImport   RunsheetImport @relation(fields: [runsheetImportId], references: [id], onDelete: Cascade)
+
+  rawData           Json
+  externalReference String?
+  matchType         String?
+  deliveryId        String?
+  delivery          Delivery? @relation(fields: [deliveryId], references: [id])
+  portalStatus      String?
+  portalAmount      Float?
+  scheduledDate     DateTime? @db.Date
+
+  // Computed at import time by comparing portalAmount/portalStatus against
+  // the matched delivery's own totalCharge/status — never a fabricated
+  // "correct" figure, only a flag for a human to check.
+  reconciliationStatus String    @default("PENDING")
+  varianceAmount       Float?
+  resolvedById         String?
+  resolvedBy           User?     @relation("RunsheetRowResolvedBy", fields: [resolvedById], references: [id])
+  resolvedAt           DateTime?
+  resolutionNotes      String?
+
+  createdAt DateTime @default(now())
+
+  @@index([runsheetImportId])
+  @@index([deliveryId])
+  @@index([reconciliationStatus])
+  @@map("runsheet_rows")
 }
 
 // A saved calculator result — the full breakdown snapshot plus which rate

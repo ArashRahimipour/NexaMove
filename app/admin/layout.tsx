@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   UserCheck,
   FileText,
+  FileSpreadsheet,
 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { SignOutButton } from "@/components/SignOutButton";
@@ -43,6 +44,7 @@ const NAV_ITEMS = [
   { key: "returns", href: "/admin/returns", label: "Returns", icon: PackageSearch },
   { key: "customer-service", href: "/admin/customer-service", label: "Customer Service", icon: Headphones },
   { key: "settlements", href: "/admin/settlements", label: "Settlements", icon: Wallet },
+  { key: "runsheets", href: "/admin/runsheets", label: "Runsheet Imports", icon: FileSpreadsheet },
   { key: "organisations", href: "/admin/organisations", label: "Retail Clients", icon: Building2 },
   { key: "servicing", href: "/admin/servicing", label: "Servicing Days", icon: CalendarDays },
   { key: "audit", href: "/admin/audit", label: "Audit Log", icon: ClipboardList },

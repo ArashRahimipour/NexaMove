@@ -32,6 +32,8 @@ export const canSetDamageResponsibility = (role: Role) =>
 export const canManageSettlements = (role: Role) => role === "ADMIN" || role === "OPERATIONS_MANAGER";
 export const canApproveSettlements = (role: Role) => role === "ADMIN";
 
+export const canManageRunsheetImports = (role: Role) => role === "ADMIN" || role === "OPERATIONS_MANAGER";
+
 export const canManageSettings = (role: Role) => role === "ADMIN";
 export const canManageOrganisations = (role: Role) => role === "ADMIN";
 
@@ -58,9 +60,9 @@ export const canManageMorningComms = (role: Role) =>
 export function visibleNavSections(role: Role): string[] {
   switch (role) {
     case "ADMIN":
-      return ["dashboard", "ai", "routes", "drivers", "vehicles", "warehouse-audits", "morning-comms", "fleet", "warehouse-reps", "dispatch", "pricing", "kpi", "reports-eod", "alerts", "returns", "customer-service", "settlements", "organisations", "servicing", "settings", "audit"];
+      return ["dashboard", "ai", "routes", "drivers", "vehicles", "warehouse-audits", "morning-comms", "fleet", "warehouse-reps", "dispatch", "pricing", "kpi", "reports-eod", "alerts", "returns", "customer-service", "settlements", "runsheets", "organisations", "servicing", "settings", "audit"];
     case "OPERATIONS_MANAGER":
-      return ["dashboard", "ai", "routes", "drivers", "warehouse-audits", "morning-comms", "fleet", "warehouse-reps", "dispatch", "pricing", "kpi", "reports-eod", "alerts", "returns", "customer-service", "settlements", "servicing"];
+      return ["dashboard", "ai", "routes", "drivers", "warehouse-audits", "morning-comms", "fleet", "warehouse-reps", "dispatch", "pricing", "kpi", "reports-eod", "alerts", "returns", "customer-service", "settlements", "runsheets", "servicing"];
     case "DISPATCHER":
       return ["dashboard", "ai", "routes", "dispatch", "pricing", "alerts", "returns", "morning-comms", "reports-eod"];
     case "CUSTOMER_SERVICE":
