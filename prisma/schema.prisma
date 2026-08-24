@@ -208,6 +208,20 @@ enum SettlementStatus {
   PAID
 }
 
+// Every scan attempt is recorded, not just successful ones — a rejected
+// scan (wrong route, already scanned, cancelled order) is itself an
+// operational event worth keeping, not just an error toast the driver sees
+// once. SCANNED is the only outcome that confirms physical collection.
+enum DispatchScanOutcome {
+  SCANNED
+  NOT_FOUND
+  CANCELLED_ORDER
+  MISSING_FROM_ROUTE
+  WRONG_ROUTE
+  DUPLICATE_SCAN
+  ALREADY_DISPATCHED
+}
+
 // ---------------------------------------------------------------------------
 // Organisations & users
 // ---------------------------------------------------------------------------
@@ -270,6 +284,7 @@ model User {
   createdFuelLevyRules     FuelLevyRule[]
   createdCarrierMappings   CarrierServiceCodeMapping[]
   pricingQuotesCreated     PricingQuote[]
+  dispatchScansPerformed   DispatchScan[]              @relation("DispatchScannedBy")
 
   @@map("users")
 }
@@ -339,7 +354,8 @@ model Route {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
-  deliveries Delivery[]
+  deliveries    Delivery[]
+  dispatchScans DispatchScan[]
 
   @@index([driverId, date])
   @@index([date])
@@ -419,6 +435,7 @@ model Delivery {
   customerRating        CustomerRating?
   aiConversations       AiConversation[]
   pricingQuote          PricingQuote?
+  dispatchScans         DispatchScan[]
 
   @@index([status])
   @@index([trackingCode])
@@ -428,6 +445,33 @@ model Delivery {
   @@index([deliveryDate])
   @@index([createdAt])
   @@map("deliveries")
+}
+
+// A physical warehouse scan of a delivery's consignment/order barcode at
+// collection — this, not assignment, is what confirms a delivery was
+// actually loaded ("physical scan = dispatch confirmation", per the Koala
+// dispatch-integrity requirement). A DB-level partial unique index
+// (dispatch_scans_one_success_per_delivery_idx, added by migration, not
+// representable in this schema file) additionally guarantees only one
+// SCANNED-outcome row can ever exist per delivery, so a duplicate scan is
+// rejected even under a race, not just checked in application code.
+model DispatchScan {
+  id          String              @id @default(cuid())
+  scannedCode String
+  deliveryId  String?
+  delivery    Delivery?           @relation(fields: [deliveryId], references: [id])
+  routeId     String?
+  route       Route?              @relation(fields: [routeId], references: [id])
+  scannedById String
+  scannedBy   User                @relation("DispatchScannedBy", fields: [scannedById], references: [id])
+  warehouse   String?
+  device      String?
+  outcome     DispatchScanOutcome
+  scannedAt   DateTime            @default(now())
+
+  @@index([deliveryId])
+  @@index([routeId, scannedAt])
+  @@map("dispatch_scans")
 }
 
 model DeliveryItem {

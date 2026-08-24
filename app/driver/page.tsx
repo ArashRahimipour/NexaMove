@@ -50,6 +50,15 @@ export default async function DriverHomePage() {
           </div>
         )}
 
+        {route && (
+          <Link href="/driver/load" className="card flex items-center justify-between gap-3 !bg-brand-500/10">
+            <div>
+              <p className="font-semibold text-ink">📦 Warehouse — scan today&apos;s stops</p>
+              <p className="text-sm text-dim">Scan each order as you load it before starting your route.</p>
+            </div>
+          </Link>
+        )}
+
         {route?.deliveries.map((delivery, idx) => (
           <Link
             key={delivery.id}
