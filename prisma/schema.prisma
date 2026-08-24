@@ -1,0 +1,1007 @@
+// NexaMove logistics platform — database schema
+// Real users, real routes, real deliveries, real tracking events, real proof-of-delivery records.
+// Multi-role, multi-tenant (retail clients), full delivery-status workflow, damage/failed/partial
+// delivery tracking, audit log. See docs/SCHEMA.md for the model-by-model rationale.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  ADMIN
+  OPERATIONS_MANAGER
+  DISPATCHER
+  CUSTOMER_SERVICE
+  DRIVER
+  RETAIL_CLIENT
+}
+
+enum RouteStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// Full delivery lifecycle. Transitions are validated in lib/status-workflow.ts —
+// a driver cannot jump e.g. ASSIGNED -> DELIVERED directly.
+enum DeliveryStatus {
+  DRAFT
+  PENDING
+  READY_FOR_DISPATCH
+  ASSIGNED
+  LOADED
+  ROUTE_STARTED
+  IN_TRANSIT
+  DRIVER_NEARBY
+  ARRIVED
+  UNLOADING
+  ASSEMBLY_IN_PROGRESS
+  DELIVERED
+  FAILED
+  DAMAGED
+  PARTIALLY_DELIVERED
+  RETURN_REQUIRED
+  RETURNED
+  RESCHEDULED
+  CANCELLED
+}
+
+enum TrackingEventType {
+  JOB_CREATED
+  DRIVER_ASSIGNED
+  LOADED
+  ROUTE_STARTED
+  EN_ROUTE
+  CUSTOMER_NOTIFIED
+  DRIVER_NEARBY
+  ARRIVED
+  UNLOADING
+  ASSEMBLY_STARTED
+  PHOTO_CAPTURED
+  SIGNATURE_CAPTURED
+  DAMAGE_NOTED
+  DELIVERED
+  FAILED
+  DAMAGED
+  PARTIALLY_DELIVERED
+  RETURNED
+  RESCHEDULED
+  CANCELLED
+  STATUS_OVERRIDE
+}
+
+enum ItemStatus {
+  PENDING
+  DELIVERED
+  NOT_DELIVERED
+  DAMAGED
+  MISSING
+  REFUSED
+}
+
+enum DamageStage {
+  BEFORE_LOADING
+  DURING_LOADING
+  IN_VEHICLE
+  DURING_TRANSPORT
+  DURING_UNLOADING
+  DURING_ASSEMBLY
+  AT_CUSTOMER_PROPERTY
+  CUSTOMER_REPORTED
+  UNKNOWN
+}
+
+enum DamageReason {
+  PRODUCT_ALREADY_DAMAGED
+  WAREHOUSE_HANDLING
+  INCORRECT_LOADING
+  INSUFFICIENT_PROTECTION
+  PRODUCT_MOVEMENT
+  DRIVER_HANDLING
+  OFFSIDER_HANDLING
+  CUSTOMER_ACCESS_ISSUE
+  STAIRS
+  LIFT_RESTRICTION
+  ASSEMBLY_DAMAGE
+  PACKAGING_FAILURE
+  MANUFACTURING_DEFECT
+  UNKNOWN
+  OTHER
+}
+
+// Responsibility starts UNDETERMINED — the driver's damage report never assigns
+// blame. Only Operations/Admin can set this, and the change is audited.
+enum DamageResponsibility {
+  UNDETERMINED
+  WAREHOUSE
+  SUPPLIER
+  MANUFACTURING
+  DRIVER
+  OFFSIDER
+  TRANSPORT
+  CUSTOMER
+  PACKAGING
+  OTHER
+  NO_RESPONSIBILITY
+}
+
+enum FailureReason {
+  CUSTOMER_NOT_HOME
+  CUSTOMER_REFUSED
+  CANNOT_ACCESS_PROPERTY
+  INCORRECT_ADDRESS
+  CUSTOMER_REQUESTED_RESCHEDULE
+  PRODUCT_DAMAGED
+  PRODUCT_MISSING
+  UNSAFE_ACCESS
+  VEHICLE_ACCESS_RESTRICTION
+  OUTSIDE_WINDOW
+  OTHER
+}
+
+enum PhotoCategory {
+  PRODUCT_DELIVERED
+  PRODUCT_IN_FINAL_LOCATION
+  ASSEMBLY_COMPLETED
+  PACKAGING_REMOVED
+  CUSTOMER_PROPERTY_ACCESS
+  DAMAGE_CLOSEUP
+  DAMAGE_FULL_PRODUCT
+  DAMAGE_PACKAGING
+  DAMAGE_LABEL
+  FAILED_DELIVERY_EVIDENCE
+  OTHER
+}
+
+enum ReceiverRelationship {
+  CUSTOMER
+  FAMILY_MEMBER
+  STAFF
+  RECEPTION
+  OTHER
+}
+
+enum CaseStatus {
+  OPEN
+  INVESTIGATING
+  AWAITING_CUSTOMER
+  AWAITING_OPERATIONS
+  RESOLVED
+  CLOSED
+}
+
+enum AlertType {
+  DELIVERY_DELAYED
+  FAILED_DELIVERY
+  DAMAGE_REPORT
+  LOW_RATING
+  LICENCE_EXPIRY
+  VEHICLE_COMPLIANCE_EXPIRY
+  DRIVER_OFFLINE
+  GEOFENCE_WARNING
+  MISSING_POD
+  ROUTE_LATE
+  CAPACITY_EXCEEDED
+  RETAIL_CLIENT_ISSUE
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum SettlementStatus {
+  DRAFT
+  REVIEW
+  APPROVED
+  PAID
+}
+
+// ---------------------------------------------------------------------------
+// Organisations & users
+// ---------------------------------------------------------------------------
+
+model Organisation {
+  id             String   @id @default(cuid())
+  companyName    String
+  abn            String?
+  contactName    String?
+  email          String?
+  phone          String?
+  billingDetails String?
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  users           User[]
+  deliveries      Delivery[]
+  aiConversations AiConversation[]
+  rateCards       RateCard[]
+  fuelLevyRules   FuelLevyRule[]
+  pricingQuotes   PricingQuote[]
+
+  @@map("organisations")
+}
+
+model User {
+  id             String        @id @default(cuid())
+  email          String        @unique
+  passwordHash   String
+  name           String
+  phone          String?
+  role           Role          @default(DRIVER)
+  organisationId String?
+  organisation   Organisation? @relation(fields: [organisationId], references: [id])
+  region         String?
+  active         Boolean       @default(true)
+  lastLoginAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  driverProfile            Driver?
+  driverRoutes             Route[]                     @relation("DriverRoutes")
+  trackingEvents           TrackingEvent[]             @relation("EventActor")
+  proofsCaptured           ProofOfDelivery[]           @relation("PodCapturedBy")
+  createdRoutes            Route[]                     @relation("RouteCreatedBy")
+  createdDeliveries        Delivery[]                  @relation("DeliveryCreatedBy")
+  damageReports            DamageReport[]              @relation("DamageReportedBy")
+  damageResponsibilitySets DamageReport[]              @relation("DamageResponsibilitySetBy")
+  failedDeliveryReports    FailedDeliveryReport[]      @relation("FailedReportedBy")
+  deliveryPhotos           DeliveryPhoto[]             @relation("PhotoUploadedBy")
+  auditLogs                AuditLog[]
+  openedCases              CustomerServiceCase[]       @relation("CaseOpenedBy")
+  caseNotes                CaseNote[]
+  acknowledgedAlerts       Alert[]                     @relation("AlertAcknowledgedBy")
+  resolvedAlerts           Alert[]                     @relation("AlertResolvedBy")
+  settlementsApproved      Settlement[]                @relation("SettlementApprovedBy")
+  aiConversations          AiConversation[]
+  aiActivityLogs           AiActivityLog[]
+  createdRateCards         RateCard[]
+  createdFuelLevyRules     FuelLevyRule[]
+  createdCarrierMappings   CarrierServiceCodeMapping[]
+  pricingQuotesCreated     PricingQuote[]
+
+  @@map("users")
+}
+
+model Driver {
+  id                  String    @id @default(cuid())
+  userId              String    @unique
+  user                User      @relation(fields: [userId], references: [id])
+  licenceNumber       String?
+  licenceExpiry       DateTime? @db.Date
+  licenceDocumentUrl  String?
+  vehicleId           String?
+  vehicle             Vehicle?  @relation(fields: [vehicleId], references: [id])
+  maxCbm              Float?
+  maxWeight           Float?
+  paymentSplitPercent Float     @default(60)
+  rating              Float?
+  active              Boolean   @default(true)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  settlements Settlement[]
+
+  @@map("drivers")
+}
+
+model Vehicle {
+  id                 String    @id @default(cuid())
+  registration       String    @unique
+  type               String
+  make               String?
+  model              String?
+  maxCbm             Float?
+  maxWeight          Float?
+  active             Boolean   @default(true)
+  insuranceExpiry    DateTime? @db.Date
+  registrationExpiry DateTime? @db.Date
+  createdAt          DateTime  @default(now())
+
+  drivers Driver[]
+  routes  Route[]
+
+  @@map("vehicles")
+}
+
+// ---------------------------------------------------------------------------
+// Routes, deliveries, items
+// ---------------------------------------------------------------------------
+
+model Route {
+  id          String      @id @default(cuid())
+  name        String
+  date        DateTime    @db.Date
+  region      String?
+  status      RouteStatus @default(PLANNED)
+  driverId    String?
+  driver      User?       @relation("DriverRoutes", fields: [driverId], references: [id])
+  vehicleId   String?
+  vehicle     Vehicle?    @relation(fields: [vehicleId], references: [id])
+  totalStops  Int         @default(0)
+  totalCbm    Float       @default(0)
+  totalWeight Float       @default(0)
+  startTime   DateTime?
+  finishTime  DateTime?
+  createdById String
+  createdBy   User        @relation("RouteCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  deliveries Delivery[]
+
+  @@index([driverId, date])
+  @@index([date])
+  @@map("routes")
+}
+
+model Delivery {
+  id                String  @id @default(cuid())
+  routeId           String?
+  route             Route?  @relation(fields: [routeId], references: [id])
+  sequence          Int     @default(0)
+  trackingCode      String  @unique @default(cuid())
+  externalReference String?
+
+  organisationId String?
+  organisation   Organisation? @relation(fields: [organisationId], references: [id])
+
+  customerName  String
+  customerPhone String?
+  customerEmail String?
+  address       String
+  suburb        String
+  postcode      String
+  state         String  @default("QLD")
+  region        String  @default("QLD")
+  lat           Float?
+  lng           Float?
+
+  deliveryDate DateTime? @db.Date
+  windowStart  DateTime?
+  windowEnd    DateTime?
+
+  numberOfBoxes            Int?
+  cbm                      Float?
+  weight                   Float?
+  assemblyRequired         Boolean @default(false)
+  packagingRemovalRequired Boolean @default(false)
+  specialInstructions      String?
+
+  vehicleId  String?
+  stopNumber Int?
+
+  status DeliveryStatus @default(PENDING)
+
+  baseCharge             Float?
+  cbmCharge              Float?
+  weightCharge           Float?
+  assemblyCharge         Float?
+  packagingRemovalCharge Float?
+  stairsCharge           Float?
+  waitingTimeCharge      Float?
+  redeliveryCharge       Float?
+  regionalSurcharge      Float?
+  otherSurcharge         Float?
+  totalCharge            Float?
+  driverPayment          Float?
+  companyRevenue         Float?
+
+  createdById    String
+  createdBy      User      @relation("DeliveryCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  dispatchedAt   DateTime?
+  routeStartedAt DateTime?
+  arrivedAt      DateTime?
+  deliveredAt    DateTime?
+  failedAt       DateTime?
+  cancelledAt    DateTime?
+
+  items                 DeliveryItem[]
+  photos                DeliveryPhoto[]
+  trackingEvents        TrackingEvent[]
+  proofOfDelivery       ProofOfDelivery?
+  damageReports         DamageReport[]
+  failedDeliveryReports FailedDeliveryReport[]
+  customerServiceCases  CustomerServiceCase[]
+  customerRating        CustomerRating?
+  aiConversations       AiConversation[]
+  pricingQuote          PricingQuote?
+
+  @@index([status])
+  @@index([trackingCode])
+  @@index([organisationId])
+  @@index([organisationId, status])
+  @@index([routeId])
+  @@index([deliveryDate])
+  @@index([createdAt])
+  @@map("deliveries")
+}
+
+model DeliveryItem {
+  id                 String     @id @default(cuid())
+  deliveryId         String
+  delivery           Delivery   @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  sku                String?
+  productDescription String
+  quantity           Int        @default(1)
+  boxes              Int?
+  cbm                Float?
+  weight             Float?
+  fragile            Boolean    @default(false)
+  assemblyRequired   Boolean    @default(false)
+  itemStatus         ItemStatus @default(PENDING)
+
+  @@map("delivery_items")
+}
+
+model DeliveryPhoto {
+  id           String        @id @default(cuid())
+  deliveryId   String
+  delivery     Delivery      @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  url          String
+  category     PhotoCategory
+  uploadedById String
+  uploadedBy   User          @relation("PhotoUploadedBy", fields: [uploadedById], references: [id])
+  gpsLat       Float?
+  gpsLng       Float?
+  uploadedAt   DateTime      @default(now())
+
+  @@index([deliveryId])
+  @@map("delivery_photos")
+}
+
+// ---------------------------------------------------------------------------
+// Tracking, proof of delivery, damage, failed delivery
+// ---------------------------------------------------------------------------
+
+model TrackingEvent {
+  id         String            @id @default(cuid())
+  deliveryId String
+  delivery   Delivery          @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  type       TrackingEventType
+  oldStatus  DeliveryStatus?
+  newStatus  DeliveryStatus?
+  lat        Float?
+  lng        Float?
+  device     String?
+  note       String?
+  actorId    String?
+  actor      User?             @relation("EventActor", fields: [actorId], references: [id])
+  createdAt  DateTime          @default(now())
+
+  @@index([deliveryId, createdAt])
+  @@map("tracking_events")
+}
+
+model ProofOfDelivery {
+  id         String   @id @default(cuid())
+  deliveryId String   @unique
+  delivery   Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  signatureUrl             String?
+  receiverName             String?
+  receiverRelationship     ReceiverRelationship?
+  signatureExceptionReason String?
+  contactless              Boolean               @default(false)
+
+  assemblyCompleted Boolean @default(false)
+  packagingRemoved  Boolean @default(false)
+
+  gpsLat                 Float
+  gpsLng                 Float
+  gpsAccuracyM           Float?
+  geofenceVerified       Boolean?
+  geofenceOverrideReason String?
+
+  capturedById String
+  capturedBy   User     @relation("PodCapturedBy", fields: [capturedById], references: [id])
+  capturedAt   DateTime @default(now())
+
+  @@map("proof_of_deliveries")
+}
+
+model DamageReport {
+  id         String   @id @default(cuid())
+  deliveryId String
+  delivery   Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  itemId     String?
+
+  discoveredStage DamageStage
+  reason          DamageReason
+  description     String
+
+  reportedById String
+  reportedBy   User   @relation("DamageReportedBy", fields: [reportedById], references: [id])
+  gpsLat       Float?
+  gpsLng       Float?
+
+  responsibility        DamageResponsibility @default(UNDETERMINED)
+  responsibilitySetById String?
+  responsibilitySetBy   User?                @relation("DamageResponsibilitySetBy", fields: [responsibilitySetById], references: [id])
+  responsibilitySetAt   DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([deliveryId])
+  @@map("damage_reports")
+}
+
+model FailedDeliveryReport {
+  id           String        @id @default(cuid())
+  deliveryId   String
+  delivery     Delivery      @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  reason       FailureReason
+  notes        String?
+  gpsLat       Float?
+  gpsLng       Float?
+  photoUrl     String?
+  reportedById String
+  reportedBy   User          @relation("FailedReportedBy", fields: [reportedById], references: [id])
+  createdAt    DateTime      @default(now())
+
+  @@index([deliveryId])
+  @@map("failed_delivery_reports")
+}
+
+// ---------------------------------------------------------------------------
+// Customer service, alerts, ratings, audit, settlements
+// ---------------------------------------------------------------------------
+
+model CustomerServiceCase {
+  id         String     @id @default(cuid())
+  deliveryId String
+  delivery   Delivery   @relation(fields: [deliveryId], references: [id])
+  status     CaseStatus @default(OPEN)
+  openedById String
+  openedBy   User       @relation("CaseOpenedBy", fields: [openedById], references: [id])
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  notes CaseNote[]
+
+  @@index([deliveryId])
+  @@map("customer_service_cases")
+}
+
+model CaseNote {
+  id        String              @id @default(cuid())
+  caseId    String
+  case      CustomerServiceCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User                @relation(fields: [authorId], references: [id])
+  note      String
+  createdAt DateTime            @default(now())
+
+  @@map("case_notes")
+}
+
+model Alert {
+  id               String      @id @default(cuid())
+  type             AlertType
+  status           AlertStatus @default(OPEN)
+  message          String
+  deliveryId       String?
+  driverId         String?
+  createdAt        DateTime    @default(now())
+  acknowledgedById String?
+  acknowledgedBy   User?       @relation("AlertAcknowledgedBy", fields: [acknowledgedById], references: [id])
+  acknowledgedAt   DateTime?
+  resolvedById     String?
+  resolvedBy       User?       @relation("AlertResolvedBy", fields: [resolvedById], references: [id])
+  resolvedAt       DateTime?
+
+  @@index([status])
+  @@map("alerts")
+}
+
+model CustomerRating {
+  id                  String   @id @default(cuid())
+  deliveryId          String   @unique
+  delivery            Delivery @relation(fields: [deliveryId], references: [id])
+  stars               Int
+  driverRating        Int?
+  communicationRating Int?
+  careRating          Int?
+  comment             String?
+  createdAt           DateTime @default(now())
+
+  @@map("customer_ratings")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  action      String
+  recordType  String
+  recordId    String?
+  beforeValue String?
+  afterValue  String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  @@index([recordType, recordId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Settlement {
+  id           String           @id @default(cuid())
+  driverId     String
+  driver       Driver           @relation(fields: [driverId], references: [id])
+  periodStart  DateTime         @db.Date
+  periodEnd    DateTime         @db.Date
+  status       SettlementStatus @default(DRAFT)
+  grossAmount  Float            @default(0)
+  driverShare  Float            @default(0)
+  companyShare Float            @default(0)
+  createdAt    DateTime         @default(now())
+  approvedById String?
+  approvedBy   User?            @relation("SettlementApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+  paidAt       DateTime?
+
+  @@index([driverId, periodStart])
+  @@map("settlements")
+}
+
+// Singleton row (id always "default") holding admin-configurable settings.
+model AppSettings {
+  id                        String   @id @default("default")
+  companyName               String   @default("NexaMove")
+  abn                       String?
+  contactEmail              String?
+  regions                   String   @default("QLD")
+  geofenceRadiusMetres      Int      @default(300)
+  photoRequiredForDelivery  Boolean  @default(true)
+  signatureRequired         Boolean  @default(true)
+  defaultDriverSplitPercent Float    @default(60)
+  gstPercentage             Float    @default(10)
+  updatedAt                 DateTime @updatedAt
+
+  @@map("app_settings")
+}
+
+// Schema-ready for Phase 4 (SMS/email) — populated once a provider is configured.
+model NotificationLog {
+  id                String   @id @default(cuid())
+  deliveryId        String?
+  channel           String
+  recipient         String
+  notificationType  String
+  status            String
+  providerMessageId String?
+  sentAt            DateTime @default(now())
+
+  @@map("notification_logs")
+}
+
+// ---------------------------------------------------------------------------
+// AI assistants (Operations AI + Customer AI) — schema-ready, populated once
+// OPENAI_API_KEY is configured. See lib/ai/.
+// ---------------------------------------------------------------------------
+
+enum AiConversationKind {
+  OPERATIONS
+  CUSTOMER
+}
+
+enum AiMessageRole {
+  USER
+  ASSISTANT
+  TOOL
+}
+
+model AiConversation {
+  id             String             @id @default(cuid())
+  kind           AiConversationKind
+  userId         String?
+  user           User?              @relation(fields: [userId], references: [id])
+  organisationId String?
+  organisation   Organisation?      @relation(fields: [organisationId], references: [id])
+  deliveryId     String?
+  delivery       Delivery?          @relation(fields: [deliveryId], references: [id])
+  title          String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  messages    AiMessage[]
+  activityLog AiActivityLog[]
+
+  @@index([userId])
+  @@index([deliveryId])
+  @@map("ai_conversations")
+}
+
+model AiMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           AiMessageRole
+  content        String
+  toolName       String?
+  createdAt      DateTime       @default(now())
+
+  @@index([conversationId, createdAt])
+  @@map("ai_messages")
+}
+
+// Append-only log of every AI tool call and chat turn — separate from
+// AuditLog (which covers direct human actions) so AI activity can be
+// reviewed/rate-limited independently. Never store hidden chain-of-thought,
+// only the request, the final response, and tool metadata.
+model AiActivityLog {
+  id                        String          @id @default(cuid())
+  conversationId            String?
+  conversation              AiConversation? @relation(fields: [conversationId], references: [id])
+  userId                    String?
+  user                      User?           @relation(fields: [userId], references: [id])
+  role                      Role?
+  organisationId            String?
+  ipAddress                 String?
+  userRequest               String?
+  action                    String
+  toolsCalled               String?
+  affectedRecordIds         String?
+  readOnly                  Boolean         @default(true)
+  humanConfirmationRequired Boolean         @default(false)
+  resultSummary             String?
+  model                     String?
+  tokensUsed                Int?
+  errorMessage              String?
+  createdAt                 DateTime        @default(now())
+
+  @@index([userId, createdAt])
+  @@index([ipAddress, createdAt])
+  @@map("ai_activity_log")
+}
+
+// ---------------------------------------------------------------------------
+// Pricing engine — rate-card based delivery pricing (CBM band + zone +
+// service type + extras -> fuel levy -> GST). See lib/pricing/engine.ts for
+// the single source of truth used by the calculator, delivery creation, and
+// margin/KPI reporting alike. Records seeded with real supplied rate-card
+// figures are `needsConfirmation: false`; anything without confirmed source
+// data (zones, extras, carrier-code mappings) seeds as `true` and must be
+// filled in by an admin — never guessed.
+// ---------------------------------------------------------------------------
+
+model ServiceType {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  label     String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  cbmBands        CbmBand[]
+  rateCardLines   RateCardLine[]
+  carrierMappings CarrierServiceCodeMapping[]
+  quotes          PricingQuote[]
+
+  @@map("service_types")
+}
+
+// A CBM band is scoped to one service type, since Small Goods and Standard
+// use entirely different bracket structures on the same rate card. Matching
+// rule (see resolveCbmBand in the engine): the first band, sorted ascending
+// by maxCbm, where cbm <= maxCbm — so 0.400 falls in a 0–0.4 band, and a
+// 15+ open-ended top band has maxCbm = null.
+model CbmBand {
+  id            String      @id @default(cuid())
+  serviceTypeId String
+  serviceType   ServiceType @relation(fields: [serviceTypeId], references: [id])
+  minCbm        Float
+  maxCbm        Float? // null = open-ended top band ("15+")
+  label         String
+  sortOrder     Int
+
+  rateCardLines RateCardLine[]
+  quotes        PricingQuote[]
+
+  @@index([serviceTypeId, sortOrder])
+  @@map("cbm_bands")
+}
+
+// organisationId set = a client-specific rate card (highest resolution
+// priority). Null organisationId + a state = the state default. Null
+// organisation and null state with isDefault = the company-wide fallback.
+model RateCard {
+  id             String        @id @default(cuid())
+  name           String
+  state          String?
+  organisationId String?
+  organisation   Organisation? @relation(fields: [organisationId], references: [id])
+  isDefault      Boolean       @default(false)
+  active         Boolean       @default(true)
+  effectiveFrom  DateTime      @default(now())
+  effectiveTo    DateTime?
+  createdById    String?
+  createdBy      User?         @relation(fields: [createdById], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  lines                RateCardLine[]
+  zonesUsingAsOverride DeliveryZone[] @relation("ZoneOverrideRateCard")
+  fuelLevyRules        FuelLevyRule[]
+  quotes               PricingQuote[]
+
+  @@index([state])
+  @@index([organisationId])
+  @@map("rate_cards")
+}
+
+model RateCardLine {
+  id                String      @id @default(cuid())
+  rateCardId        String
+  rateCard          RateCard    @relation(fields: [rateCardId], references: [id], onDelete: Cascade)
+  serviceTypeId     String
+  serviceType       ServiceType @relation(fields: [serviceTypeId], references: [id])
+  cbmBandId         String
+  cbmBand           CbmBand     @relation(fields: [cbmBandId], references: [id])
+  price             Float?
+  needsConfirmation Boolean     @default(false)
+
+  @@unique([rateCardId, serviceTypeId, cbmBandId])
+  @@map("rate_card_lines")
+}
+
+enum ZoneAdjustmentModel {
+  NONE
+  FIXED_TABLE
+  FIXED_SURCHARGE
+  MULTIPLIER
+  CLIENT_NEGOTIATED
+}
+
+model DeliveryZone {
+  id                 String              @id @default(cuid())
+  code               String              @unique
+  name               String
+  state              String
+  postcodes          String?
+  active             Boolean             @default(true)
+  adjustmentModel    ZoneAdjustmentModel @default(NONE)
+  fixedSurcharge     Float?
+  multiplier         Float?
+  minimumCharge      Float?
+  overrideRateCardId String?
+  overrideRateCard   RateCard?           @relation("ZoneOverrideRateCard", fields: [overrideRateCardId], references: [id])
+  needsConfirmation  Boolean             @default(true)
+  notes              String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  quotes PricingQuote[]
+
+  @@map("delivery_zones")
+}
+
+model FuelLevyRule {
+  id             String        @id @default(cuid())
+  organisationId String?
+  organisation   Organisation? @relation(fields: [organisationId], references: [id])
+  state          String?
+  rateCardId     String?
+  rateCard       RateCard?     @relation(fields: [rateCardId], references: [id])
+  percentage     Float
+  effectiveFrom  DateTime      @default(now())
+  effectiveTo    DateTime?
+  active         Boolean       @default(true)
+  createdById    String?
+  createdBy      User?         @relation(fields: [createdById], references: [id])
+  createdAt      DateTime      @default(now())
+
+  @@map("fuel_levies")
+}
+
+enum ExtraAmountType {
+  FIXED
+  PER_HOUR
+  PER_CBM
+}
+
+model PricingExtra {
+  id                String          @id @default(cuid())
+  code              String          @unique
+  label             String
+  amountType        ExtraAmountType @default(FIXED)
+  amount            Float?
+  taxable           Boolean         @default(true)
+  active            Boolean         @default(true)
+  needsConfirmation Boolean         @default(true)
+  updatedAt         DateTime        @updatedAt
+
+  @@map("pricing_extras")
+}
+
+// Imported carrier codes (e.g. "Del Stand", "Ex Small") are never
+// auto-interpreted — they seed unconfirmed with only a suggested label, and
+// an admin must explicitly confirm the mapped ServiceType before the
+// Invoice Analyser will use them with full confidence.
+model CarrierServiceCodeMapping {
+  id             String       @id @default(cuid())
+  sourceCode     String       @unique
+  serviceTypeId  String?
+  serviceType    ServiceType? @relation(fields: [serviceTypeId], references: [id])
+  suggestedLabel String?
+  confirmed      Boolean      @default(false)
+  createdById    String?
+  createdBy      User?        @relation(fields: [createdById], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@map("carrier_service_code_mappings")
+}
+
+// A saved calculator result — the full breakdown snapshot plus which rate
+// card/rule produced it, so a quote remains explainable even after the
+// underlying rate card is later edited. Optionally linked to a real Delivery
+// once converted.
+model PricingQuote {
+  id             String        @id @default(cuid())
+  quoteNumber    String        @unique
+  organisationId String?
+  organisation   Organisation? @relation(fields: [organisationId], references: [id])
+  deliveryId     String?       @unique
+  delivery       Delivery?     @relation(fields: [deliveryId], references: [id])
+
+  state          String
+  originPostcode String?
+  destPostcode   String
+  zoneId         String?
+  zone           DeliveryZone? @relation(fields: [zoneId], references: [id])
+  serviceTypeId  String
+  serviceType    ServiceType   @relation(fields: [serviceTypeId], references: [id])
+  cbmBandId      String?
+  cbmBand        CbmBand?      @relation(fields: [cbmBandId], references: [id])
+
+  cbm                   Float
+  weight                Float?
+  quantity              Int?
+  assemblyRequired      Boolean @default(false)
+  stairs                Boolean @default(false)
+  additionalLabourHours Float?
+  otherSurcharge        Float   @default(0)
+
+  baseRate       Float
+  zoneAdjustment Float @default(0)
+  assemblyCharge Float @default(0)
+  otherExtras    Float @default(0)
+  nettCharge     Float
+
+  fuelLevyPercentage Float
+  fuelLevyAmount     Float
+  gstPercentage      Float
+  gstAmount          Float
+  totalPrice         Float
+
+  rateCardId           String?
+  rateCard             RateCard? @relation(fields: [rateCardId], references: [id])
+  rateCardNameSnapshot String
+  ruleIdSnapshot       String
+
+  driverPaymentPercent Float
+  driverPayment        Float
+  companyMargin        Float
+
+  currentCarrierPrice Float?
+
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@map("pricing_quotes")
+}

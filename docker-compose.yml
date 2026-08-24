@@ -1,0 +1,41 @@
+# Local development stack: app + PostgreSQL.
+# Usage: docker compose up --build
+# Then, in a second terminal: docker compose exec app npx prisma migrate deploy
+#                              docker compose exec app npm run db:seed
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nexamove
+      POSTGRES_PASSWORD: nexamove
+      POSTGRES_DB: nexamove
+    ports:
+      - "5432:5432"
+    volumes:
+      - nexamove_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexamove"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://nexamove:nexamove@db:5432/nexamove
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-change-me-in-production}
+    volumes:
+      - uploads_data:/app/public/uploads
+
+volumes:
+  nexamove_db_data:
+  uploads_data:

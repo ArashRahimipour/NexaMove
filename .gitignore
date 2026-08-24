@@ -1,0 +1,36 @@
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# lockfile intentionally not committed — `npm install` resolves fresh
+# against package.json's semver ranges on every install (see Dockerfile)
+package-lock.json
+
+# env
+.env
+.env.local
+.env.*.local
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# os
+.DS_Store
+
+# uploads (local dev storage - never commit real customer photos/signatures)
+public/uploads/*
+!public/uploads/.gitkeep
+
+# prisma
+prisma/dev.db
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# sentry
+.sentryclirc
