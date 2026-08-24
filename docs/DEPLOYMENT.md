@@ -55,7 +55,8 @@ On your host's environment-variable settings (never commit these to git):
 
 | Variable | Required | Notes |
 |---|---|---|
-| `DATABASE_URL` | Yes | From step 1 |
+| `DATABASE_URL` | Yes | From step 1. On a pooled connection (Supabase's port-6543 "Transaction pooler" string, PgBouncer in general), also set `DIRECT_URL` below. |
+| `DIRECT_URL` | Only if `DATABASE_URL` is pooled | The same database's **direct** (non-pooled) connection string — on Supabase, port 5432. `prisma migrate` needs this; pgbouncer's transaction mode doesn't support the locks the migration engine uses. |
 | `NEXTAUTH_SECRET` | Yes | `openssl rand -base64 32` — a **different** value for staging vs. production |
 | `NEXTAUTH_URL` | Yes | The full public URL of this deployment, e.g. `https://app.nexamove.com.au` |
 | `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Recommended for production | See step 4 |
@@ -127,6 +128,13 @@ Run this as a one-off command/release step on your host after each deploy
 that changes `prisma/schema.prisma`. On Render/Railway this can be wired
 as a "pre-deploy" or "release" command; otherwise run it manually via the
 host's shell/SSH access after deploying.
+
+**On Vercel** specifically, there's no separate release-phase step, so
+`vercel.json`'s `buildCommand` already runs it as part of every build
+(`prisma generate && prisma migrate deploy && next build`) — nothing extra
+to configure beyond setting `DATABASE_URL`/`DIRECT_URL`. This does mean a
+schema change ships live the moment a build succeeds, with no separate
+approval gate; fine for a single-instance deployment, but be aware of it.
 
 ## Staging vs. production checklist
 
