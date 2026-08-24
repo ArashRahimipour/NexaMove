@@ -27,6 +27,12 @@ import { SignOutButton } from "@/components/SignOutButton";
 import { AdminNavLink } from "@/components/AdminNavLink";
 import { canViewAdminDashboard, visibleNavSections } from "@/lib/permissions";
 
+// Every page under here is per-session, back-office-specific data — never
+// safe to prerender. See app/driver/layout.tsx for why this matters at
+// build time (next-auth throws "Invalid URL" instead of Next gracefully
+// falling back to dynamic rendering when NEXTAUTH_URL isn't set yet).
+export const dynamic = "force-dynamic";
+
 const NAV_ITEMS = [
   { key: "ai", href: "/admin/ai", label: "NexaMove AI", icon: Sparkles },
   { key: "routes", href: "/admin/routes", label: "Routes", icon: Route },
