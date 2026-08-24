@@ -8,6 +8,7 @@ const assignSchema = z.object({
   deliveryId: z.string().min(1),
   driverId: z.string().min(1),
   overrideCapacity: z.boolean().optional(),
+  overrideUnapproved: z.boolean().optional(),
 });
 
 // Assigns an unassigned delivery to a driver, creating (or reusing) that
@@ -19,13 +20,36 @@ export async function POST(req: Request) {
   const body = await req.json();
   const parsed = assignSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  const { deliveryId, driverId, overrideCapacity } = parsed.data;
+  const { deliveryId, driverId, overrideCapacity, overrideUnapproved } = parsed.data;
 
   const delivery = await prisma.delivery.findUnique({ where: { id: deliveryId } });
   if (!delivery) return NextResponse.json({ error: "Delivery not found" }, { status: 404 });
 
   const driver = await prisma.user.findUnique({ where: { id: driverId }, include: { driverProfile: { include: { vehicle: true } } } });
   if (!driver || driver.role !== "DRIVER") return NextResponse.json({ error: "Driver not found" }, { status: 404 });
+
+  // Warn (never silently block — an authorised override, or an emergency
+  // substitute, is always allowed) when this client tracks driver approvals
+  // at all and this driver either has no approval record or isn't approved.
+  // A client with no approval records configured is unrestricted, same as
+  // servicing days and every other client-opt-in constraint in this app.
+  if (delivery.organisationId && !overrideUnapproved) {
+    const trackingApprovals = await prisma.clientDriverApproval.count({ where: { organisationId: delivery.organisationId } });
+    if (trackingApprovals > 0) {
+      const approval = await prisma.clientDriverApproval.findUnique({
+        where: { organisationId_driverId: { organisationId: delivery.organisationId, driverId } },
+      });
+      if (!approval?.approved) {
+        return NextResponse.json(
+          {
+            error: "driver_not_approved",
+            message: `${driver.name} is not an approved driver for this client. Confirm this is an authorised emergency substitute, or assign an approved driver instead.`,
+          },
+          { status: 409 }
+        );
+      }
+    }
+  }
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);

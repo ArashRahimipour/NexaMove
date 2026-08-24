@@ -58,13 +58,13 @@ export const canManageMorningComms = (role: Role) =>
 export function visibleNavSections(role: Role): string[] {
   switch (role) {
     case "ADMIN":
-      return ["dashboard", "ai", "routes", "drivers", "vehicles", "warehouse-audits", "morning-comms", "dispatch", "pricing", "kpi", "alerts", "returns", "customer-service", "settlements", "organisations", "servicing", "settings", "audit"];
+      return ["dashboard", "ai", "routes", "drivers", "vehicles", "warehouse-audits", "morning-comms", "fleet", "warehouse-reps", "dispatch", "pricing", "kpi", "reports-eod", "alerts", "returns", "customer-service", "settlements", "organisations", "servicing", "settings", "audit"];
     case "OPERATIONS_MANAGER":
-      return ["dashboard", "ai", "routes", "drivers", "warehouse-audits", "morning-comms", "dispatch", "pricing", "kpi", "alerts", "returns", "customer-service", "settlements", "servicing"];
+      return ["dashboard", "ai", "routes", "drivers", "warehouse-audits", "morning-comms", "fleet", "warehouse-reps", "dispatch", "pricing", "kpi", "reports-eod", "alerts", "returns", "customer-service", "settlements", "servicing"];
     case "DISPATCHER":
-      return ["dashboard", "ai", "routes", "dispatch", "pricing", "alerts", "returns", "morning-comms"];
+      return ["dashboard", "ai", "routes", "dispatch", "pricing", "alerts", "returns", "morning-comms", "reports-eod"];
     case "CUSTOMER_SERVICE":
-      return ["ai", "returns", "morning-comms", "customer-service"];
+      return ["ai", "returns", "morning-comms", "customer-service", "reports-eod"];
     case "RETAIL_CLIENT":
       return ["client-portal"];
     default:

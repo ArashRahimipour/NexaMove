@@ -7,6 +7,7 @@ import { canSetDamageResponsibility } from "@/lib/permissions";
 import { DamageResponsibilityForm } from "@/components/DamageResponsibilityForm";
 import { OpenCaseButton } from "@/components/OpenCaseButton";
 import { BackLink } from "@/components/BackLink";
+import { PreDeliveryConfirmationPanel } from "@/components/PreDeliveryConfirmationPanel";
 
 const PHOTO_CATEGORY_LABEL: Record<string, string> = {
   PRODUCT_DELIVERED: "Product delivered",
@@ -36,6 +37,7 @@ export default async function DeliveryDetailPage({ params }: { params: { id: str
       customerServiceCases: { include: { notes: true }, orderBy: { createdAt: "desc" } },
       customerRating: true,
       organisation: true,
+      preDeliveryConfirmations: { include: { staff: { select: { name: true } } }, orderBy: { createdAt: "desc" } },
     },
   });
 
@@ -75,6 +77,14 @@ export default async function DeliveryDetailPage({ params }: { params: { id: str
             Customer tracking link →
           </Link>
         </div>
+
+        <PreDeliveryConfirmationPanel
+          deliveryId={delivery.id}
+          initialConfirmations={delivery.preDeliveryConfirmations.map((c) => ({
+            ...c,
+            createdAt: c.createdAt.toISOString(),
+          }))}
+        />
 
         {delivery.items.length > 0 && (
           <div className="card space-y-1 text-sm">

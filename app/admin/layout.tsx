@@ -17,6 +17,9 @@ import {
   CalendarDays,
   ClipboardCheck,
   Sunrise,
+  ShieldCheck,
+  UserCheck,
+  FileText,
 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { SignOutButton } from "@/components/SignOutButton";
@@ -31,8 +34,11 @@ const NAV_ITEMS = [
   { key: "vehicles", href: "/admin/vehicles", label: "Vehicles", icon: Truck },
   { key: "warehouse-audits", href: "/admin/warehouse-audits", label: "Warehouse Audits", icon: ClipboardCheck },
   { key: "morning-comms", href: "/admin/morning-comms", label: "Morning Communication", icon: Sunrise },
+  { key: "fleet", href: "/admin/fleet", label: "Dedicated Fleet", icon: ShieldCheck },
+  { key: "warehouse-reps", href: "/admin/warehouse-reps", label: "Warehouse Reps", icon: UserCheck },
   { key: "pricing", href: "/admin/pricing", label: "Pricing", icon: Calculator },
   { key: "kpi", href: "/admin/kpi", label: "KPI", icon: BarChart3 },
+  { key: "reports-eod", href: "/admin/reports/eod", label: "EOD Report", icon: FileText },
   { key: "alerts", href: "/admin/alerts", label: "Alerts", icon: Bell },
   { key: "returns", href: "/admin/returns", label: "Returns", icon: PackageSearch },
   { key: "customer-service", href: "/admin/customer-service", label: "Customer Service", icon: Headphones },

@@ -9,7 +9,7 @@ export function AssignDeliveryRow({ deliveryId, drivers }: { deliveryId: string;
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  async function assign(overrideCapacity = false) {
+  async function assign(overrides: { overrideCapacity?: boolean; overrideUnapproved?: boolean } = {}) {
     if (!driverId) return;
     setSubmitting(true);
     setError(null);
@@ -17,12 +17,20 @@ export function AssignDeliveryRow({ deliveryId, drivers }: { deliveryId: string;
       const res = await fetch("/api/dispatch/assign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deliveryId, driverId, overrideCapacity }),
+        body: JSON.stringify({ deliveryId, driverId, ...overrides }),
       });
       const json = await res.json();
       if (res.status === 409 && json.error === "capacity_exceeded") {
         if (confirm(`${json.message}\n\nAssign anyway?`)) {
-          await assign(true);
+          await assign({ ...overrides, overrideCapacity: true });
+          return;
+        }
+        setError(json.message);
+        return;
+      }
+      if (res.status === 409 && json.error === "driver_not_approved") {
+        if (confirm(`${json.message}\n\nConfirm authorised override and assign anyway?`)) {
+          await assign({ ...overrides, overrideUnapproved: true });
           return;
         }
         setError(json.message);
@@ -47,7 +55,7 @@ export function AssignDeliveryRow({ deliveryId, drivers }: { deliveryId: string;
           </option>
         ))}
       </select>
-      <button type="button" className="btn-secondary" disabled={!driverId || submitting} onClick={() => assign(false)}>
+      <button type="button" className="btn-secondary" disabled={!driverId || submitting} onClick={() => assign()}>
         {submitting ? "Assigning…" : "Assign"}
       </button>
       {error && <p className="text-xs text-[#DC2626]">{error}</p>}

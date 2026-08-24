@@ -241,15 +241,19 @@ model Organisation {
   active         Boolean  @default(true)
   createdAt      DateTime @default(now())
 
-  users                    User[]
-  deliveries               Delivery[]
-  aiConversations          AiConversation[]
-  rateCards                RateCard[]
-  fuelLevyRules            FuelLevyRule[]
-  pricingQuotes            PricingQuote[]
-  servicingSchedules       ServicingSchedule[]
-  warehouseAudits          WarehouseAudit[]
-  morningCommunicationLogs MorningCommunicationLog[]
+  users                         User[]
+  deliveries                    Delivery[]
+  aiConversations               AiConversation[]
+  rateCards                     RateCard[]
+  fuelLevyRules                 FuelLevyRule[]
+  pricingQuotes                 PricingQuote[]
+  servicingSchedules            ServicingSchedule[]
+  warehouseAudits               WarehouseAudit[]
+  morningCommunicationLogs      MorningCommunicationLog[]
+  clientDriverApprovals         ClientDriverApproval[]
+  clientVehicleApprovals        ClientVehicleApproval[]
+  clientDriverTrainings         ClientDriverTraining[]
+  warehouseRepresentativeShifts WarehouseRepresentativeShift[]
 
   @@map("organisations")
 }
@@ -269,36 +273,42 @@ model User {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  driverProfile            Driver?
-  driverRoutes             Route[]                     @relation("DriverRoutes")
-  trackingEvents           TrackingEvent[]             @relation("EventActor")
-  proofsCaptured           ProofOfDelivery[]           @relation("PodCapturedBy")
-  createdRoutes            Route[]                     @relation("RouteCreatedBy")
-  createdDeliveries        Delivery[]                  @relation("DeliveryCreatedBy")
-  damageReports            DamageReport[]              @relation("DamageReportedBy")
-  damageResponsibilitySets DamageReport[]              @relation("DamageResponsibilitySetBy")
-  failedDeliveryReports    FailedDeliveryReport[]      @relation("FailedReportedBy")
-  deliveryPhotos           DeliveryPhoto[]             @relation("PhotoUploadedBy")
-  auditLogs                AuditLog[]
-  openedCases              CustomerServiceCase[]       @relation("CaseOpenedBy")
-  caseNotes                CaseNote[]
-  acknowledgedAlerts       Alert[]                     @relation("AlertAcknowledgedBy")
-  resolvedAlerts           Alert[]                     @relation("AlertResolvedBy")
-  settlementsApproved      Settlement[]                @relation("SettlementApprovedBy")
-  aiConversations          AiConversation[]
-  aiActivityLogs           AiActivityLog[]
-  createdRateCards         RateCard[]
-  createdFuelLevyRules     FuelLevyRule[]
-  createdCarrierMappings   CarrierServiceCodeMapping[]
-  pricingQuotesCreated     PricingQuote[]
-  dispatchScansPerformed   DispatchScan[]              @relation("DispatchScannedBy")
-  returnTasksAsDriver      ReturnTask[]                @relation("ReturnTaskDriver")
-  returnTasksScannedIn     ReturnTask[]                @relation("ReturnTaskScannedInBy")
-  returnTasksCreated       ReturnTask[]                @relation("ReturnTaskCreatedBy")
-  warehouseAuditsAsAuditor WarehouseAudit[]            @relation("WarehouseAuditAuditor")
-  warehouseAuditsAsDriver  WarehouseAudit[]            @relation("WarehouseAuditDriver")
-  morningCommsAsDriver     MorningCommunicationLog[]   @relation("MorningCommDriver")
-  morningCommsCreated      MorningCommunicationLog[]   @relation("MorningCommCreatedBy")
+  driverProfile                  Driver?
+  driverRoutes                   Route[]                        @relation("DriverRoutes")
+  trackingEvents                 TrackingEvent[]                @relation("EventActor")
+  proofsCaptured                 ProofOfDelivery[]              @relation("PodCapturedBy")
+  createdRoutes                  Route[]                        @relation("RouteCreatedBy")
+  createdDeliveries              Delivery[]                     @relation("DeliveryCreatedBy")
+  damageReports                  DamageReport[]                 @relation("DamageReportedBy")
+  damageResponsibilitySets       DamageReport[]                 @relation("DamageResponsibilitySetBy")
+  failedDeliveryReports          FailedDeliveryReport[]         @relation("FailedReportedBy")
+  deliveryPhotos                 DeliveryPhoto[]                @relation("PhotoUploadedBy")
+  auditLogs                      AuditLog[]
+  openedCases                    CustomerServiceCase[]          @relation("CaseOpenedBy")
+  caseNotes                      CaseNote[]
+  acknowledgedAlerts             Alert[]                        @relation("AlertAcknowledgedBy")
+  resolvedAlerts                 Alert[]                        @relation("AlertResolvedBy")
+  settlementsApproved            Settlement[]                   @relation("SettlementApprovedBy")
+  aiConversations                AiConversation[]
+  aiActivityLogs                 AiActivityLog[]
+  createdRateCards               RateCard[]
+  createdFuelLevyRules           FuelLevyRule[]
+  createdCarrierMappings         CarrierServiceCodeMapping[]
+  pricingQuotesCreated           PricingQuote[]
+  dispatchScansPerformed         DispatchScan[]                 @relation("DispatchScannedBy")
+  returnTasksAsDriver            ReturnTask[]                   @relation("ReturnTaskDriver")
+  returnTasksScannedIn           ReturnTask[]                   @relation("ReturnTaskScannedInBy")
+  returnTasksCreated             ReturnTask[]                   @relation("ReturnTaskCreatedBy")
+  warehouseAuditsAsAuditor       WarehouseAudit[]               @relation("WarehouseAuditAuditor")
+  warehouseAuditsAsDriver        WarehouseAudit[]               @relation("WarehouseAuditDriver")
+  morningCommsAsDriver           MorningCommunicationLog[]      @relation("MorningCommDriver")
+  morningCommsCreated            MorningCommunicationLog[]      @relation("MorningCommCreatedBy")
+  preDeliveryConfirmationsLogged PreDeliveryConfirmation[]
+  clientDriverApprovalsAsDriver  ClientDriverApproval[]         @relation("ClientDriverApprovalDriver")
+  clientDriverTrainingsAsDriver  ClientDriverTraining[]         @relation("ClientDriverTrainingDriver")
+  clientDriverTrainingsApproved  ClientDriverTraining[]         @relation("ClientDriverTrainingApprovedBy")
+  warehouseRepShiftsAsRep        WarehouseRepresentativeShift[] @relation("WarehouseRepShiftRep")
+  warehouseRepShiftsCreated      WarehouseRepresentativeShift[] @relation("WarehouseRepShiftCreatedBy")
 
   @@map("users")
 }
@@ -342,6 +352,7 @@ model Vehicle {
   routes                   Route[]
   warehouseAudits          WarehouseAudit[]
   morningCommunicationLogs MorningCommunicationLog[]
+  clientVehicleApprovals   ClientVehicleApproval[]
 
   @@map("vehicles")
 }
@@ -454,6 +465,7 @@ model Delivery {
   dispatchScans            DispatchScan[]
   returnTasks              ReturnTask[]
   morningCommunicationLogs MorningCommunicationLog[]
+  preDeliveryConfirmations PreDeliveryConfirmation[]
 
   @@index([status])
   @@index([trackingCode])
@@ -610,6 +622,101 @@ model MorningCommunicationLog {
   @@map("morning_communication_logs")
 }
 
+// Dedicated fleet / driver-vehicle approval, per client — never a global
+// "Koala driver" flag on Driver/Vehicle, since the same driver or vehicle
+// might be approved for one client and not another. approved gates whether
+// dispatch warns on assignment (see app/api/dispatch/assign); dedicated
+// marks the driver/vehicle as reserved for that client's own fleet rather
+// than the general pool; primary/backup distinguishes within a client's
+// dedicated set. Emergency substitute drivers are never blocked, only
+// warned — dispatch always allows an authorised override.
+model ClientDriverApproval {
+  id               String       @id @default(cuid())
+  organisationId   String
+  organisation     Organisation @relation(fields: [organisationId], references: [id])
+  driverId         String
+  driver           User         @relation("ClientDriverApprovalDriver", fields: [driverId], references: [id])
+  approved         Boolean      @default(false)
+  dedicated        Boolean      @default(false)
+  primaryDriver    Boolean      @default(false)
+  active           Boolean      @default(true)
+  complianceStatus String?
+  notes            String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@unique([organisationId, driverId])
+  @@map("client_driver_approvals")
+}
+
+model ClientVehicleApproval {
+  id             String       @id @default(cuid())
+  organisationId String
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+  vehicleId      String
+  vehicle        Vehicle      @relation(fields: [vehicleId], references: [id])
+  approved       Boolean      @default(false)
+  dedicated      Boolean      @default(false)
+  preferred      Boolean      @default(false)
+  active         Boolean      @default(true)
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organisationId, vehicleId])
+  @@map("client_vehicle_approvals")
+}
+
+// Client product/competency training — separate from general driver
+// compliance (licence etc., already on Driver) since this is specific to
+// one client's product/process, not the driver's general fitness to drive.
+enum ClientTrainingType {
+  INDUCTION
+  PRODUCT_HANDLING
+  ASSEMBLY
+  CUSTOMER_SERVICE
+}
+
+model ClientDriverTraining {
+  id             String             @id @default(cuid())
+  organisationId String
+  organisation   Organisation       @relation(fields: [organisationId], references: [id])
+  driverId       String
+  driver         User               @relation("ClientDriverTrainingDriver", fields: [driverId], references: [id])
+  trainingType   ClientTrainingType
+  completedAt    DateTime           @db.Date
+  expiresAt      DateTime?          @db.Date
+  documentUrl    String?
+  approvedById   String?
+  approvedBy     User?              @relation("ClientDriverTrainingApprovedBy", fields: [approvedById], references: [id])
+  createdAt      DateTime           @default(now())
+
+  @@index([organisationId, driverId])
+  @@map("client_driver_trainings")
+}
+
+// A designated logistics representative present during collections — not a
+// payroll system, just who/where/when and a check-in/out timestamp pair.
+model WarehouseRepresentativeShift {
+  id               String        @id @default(cuid())
+  organisationId   String?
+  organisation     Organisation? @relation(fields: [organisationId], references: [id])
+  representativeId String
+  representative   User          @relation("WarehouseRepShiftRep", fields: [representativeId], references: [id])
+  warehouse        String
+  date             DateTime      @db.Date
+  shift            String
+  checkInAt        DateTime?
+  checkOutAt       DateTime?
+  notes            String?
+  createdById      String
+  createdBy        User          @relation("WarehouseRepShiftCreatedBy", fields: [createdById], references: [id])
+  createdAt        DateTime      @default(now())
+
+  @@index([date])
+  @@map("warehouse_representative_shifts")
+}
+
 // Collection/exchange return tracking — a job that involves taking goods
 // back from a customer (a swap-over, an exchange, a straight collection)
 // must have those goods scanned in at the warehouse within 48 hours. The
@@ -702,6 +809,43 @@ model DispatchScan {
   @@index([deliveryId])
   @@index([routeId, scannedAt])
   @@map("dispatch_scans")
+}
+
+// Pre-delivery customer contact record — every attempt is its own row
+// (never a single mutable flag), so "who contacted the customer, when, how,
+// and what did they say" stays a real audit trail. A delivery's current
+// confirmation status is the latest row for that delivery, not a
+// duplicated column on Delivery itself.
+enum PreDeliveryConfirmationStatus {
+  NOT_CONTACTED
+  CONTACT_ATTEMPTED
+  CONFIRMED
+  UNABLE_TO_CONTACT
+  DETAILS_CHANGED
+}
+
+enum ContactChannel {
+  PHONE
+  SMS
+  EMAIL
+  IN_PERSON
+  OTHER
+}
+
+model PreDeliveryConfirmation {
+  id               String                        @id @default(cuid())
+  deliveryId       String
+  delivery         Delivery                      @relation(fields: [deliveryId], references: [id])
+  status           PreDeliveryConfirmationStatus
+  channel          ContactChannel
+  notes            String?
+  customerResponse String?
+  staffId          String
+  staff            User                          @relation(fields: [staffId], references: [id])
+  createdAt        DateTime                      @default(now())
+
+  @@index([deliveryId, createdAt])
+  @@map("pre_delivery_confirmations")
 }
 
 model DeliveryItem {

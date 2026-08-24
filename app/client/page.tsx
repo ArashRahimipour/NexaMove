@@ -21,7 +21,15 @@ export default async function ClientPortalPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Your deliveries</h1>
-        <ClientCreateDeliveryForm />
+        <div className="flex items-center gap-2">
+          <Link href="/client/dashboard" className="btn-secondary">
+            Dashboard
+          </Link>
+          <Link href="/client/reports/eod" className="btn-secondary">
+            EOD reports
+          </Link>
+          <ClientCreateDeliveryForm />
+        </div>
       </div>
 
       {!organisationId && (
