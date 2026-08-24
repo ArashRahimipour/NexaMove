@@ -95,7 +95,7 @@ export default async function DeliveryDetailPage({ params }: { params: { id: str
             <p>Captured: {new Date(delivery.proofOfDelivery.capturedAt).toLocaleString("en-AU")}</p>
             <p>GPS verified: {delivery.proofOfDelivery.geofenceVerified === false ? "⚠️ Overridden" : "✅ Yes"}</p>
             {delivery.proofOfDelivery.signatureUrl && (
-              <a href={delivery.proofOfDelivery.signatureUrl} target="_blank" rel="noreferrer" className="text-brand-400 hover:underline">
+              <a href={`/api/files/signature/${delivery.proofOfDelivery.id}`} target="_blank" rel="noreferrer" className="text-brand-400 hover:underline">
                 View signature →
               </a>
             )}
@@ -150,9 +150,9 @@ export default async function DeliveryDetailPage({ params }: { params: { id: str
           <p className="mb-3 font-semibold">📷 Photos ({delivery.photos.length})</p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {delivery.photos.map((p) => (
-              <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="block space-y-1">
+              <a key={p.id} href={`/api/files/photo/${p.id}`} target="_blank" rel="noreferrer" className="block space-y-1">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={p.url} alt={PHOTO_CATEGORY_LABEL[p.category] ?? p.category} className="aspect-square w-full rounded-lg object-cover" />
+                <img src={`/api/files/photo/${p.id}`} alt={PHOTO_CATEGORY_LABEL[p.category] ?? p.category} className="aspect-square w-full rounded-lg object-cover" />
                 <p className="text-xs text-dim">{PHOTO_CATEGORY_LABEL[p.category] ?? p.category}</p>
               </a>
             ))}

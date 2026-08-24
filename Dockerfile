@@ -27,7 +27,9 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
-RUN mkdir -p /app/public/uploads && chown -R nextjs:nodejs /app/public/uploads
+# private-uploads lives outside public/ so local-disk files are never
+# directly web-servable — only through the authorised app/api/files/* routes.
+RUN mkdir -p /app/private-uploads && chown -R nextjs:nodejs /app/private-uploads
 
 USER nextjs
 EXPOSE 3000

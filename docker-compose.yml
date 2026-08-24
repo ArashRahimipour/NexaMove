@@ -34,7 +34,7 @@ services:
       NEXTAUTH_URL: http://localhost:3000
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-change-me-in-production}
     volumes:
-      - uploads_data:/app/public/uploads
+      - uploads_data:/app/private-uploads
 
 volumes:
   nexamove_db_data:

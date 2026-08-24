@@ -28,12 +28,29 @@ const EVENT_LABEL: Record<string, string> = {
 };
 
 export default async function TrackingPage({ params }: { params: { code: string } }) {
+  // Only the fields this public, unauthenticated page actually renders —
+  // never the full Delivery row (which includes customer contact details,
+  // every charge/payment field, internal notes, etc.) or the full
+  // ProofOfDelivery/DamageReport rows (which include GPS coordinates,
+  // internal staff IDs, and — for damage — responsibility findings not
+  // meant for the customer).
   const delivery = await prisma.delivery.findUnique({
     where: { trackingCode: params.code },
-    include: {
-      trackingEvents: { orderBy: { createdAt: "asc" } },
-      proofOfDelivery: true,
-      damageReports: true,
+    select: {
+      trackingCode: true,
+      status: true,
+      suburb: true,
+      postcode: true,
+      windowStart: true,
+      windowEnd: true,
+      trackingEvents: {
+        orderBy: { createdAt: "asc" },
+        select: { id: true, type: true, createdAt: true },
+      },
+      proofOfDelivery: {
+        select: { receiverName: true, contactless: true, capturedAt: true },
+      },
+      damageReports: { select: { id: true } },
     },
   });
 

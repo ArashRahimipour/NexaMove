@@ -22,6 +22,10 @@ yarn-error.log*
 .DS_Store
 
 # uploads (local dev storage - never commit real customer photos/signatures)
+# private-uploads/ is the current location (outside public/, served only
+# through the authorised app/api/files/* routes); public/uploads/ is kept
+# ignored too since it's where files from before that change may still sit.
+private-uploads/
 public/uploads/*
 !public/uploads/.gitkeep
 
