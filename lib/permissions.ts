@@ -52,9 +52,9 @@ export const canViewReturns = (role: Role) =>
 export function visibleNavSections(role: Role): string[] {
   switch (role) {
     case "ADMIN":
-      return ["dashboard", "ai", "routes", "drivers", "vehicles", "dispatch", "pricing", "kpi", "alerts", "returns", "customer-service", "settlements", "organisations", "servicing", "settings", "audit"];
+      return ["dashboard", "ai", "routes", "drivers", "vehicles", "warehouse-audits", "dispatch", "pricing", "kpi", "alerts", "returns", "customer-service", "settlements", "organisations", "servicing", "settings", "audit"];
     case "OPERATIONS_MANAGER":
-      return ["dashboard", "ai", "routes", "drivers", "dispatch", "pricing", "kpi", "alerts", "returns", "customer-service", "settlements", "servicing"];
+      return ["dashboard", "ai", "routes", "drivers", "warehouse-audits", "dispatch", "pricing", "kpi", "alerts", "returns", "customer-service", "settlements", "servicing"];
     case "DISPATCHER":
       return ["dashboard", "ai", "routes", "dispatch", "pricing", "alerts", "returns"];
     case "CUSTOMER_SERVICE":

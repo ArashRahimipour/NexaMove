@@ -196,6 +196,7 @@ enum AlertType {
   RETURN_SLA_WARNING_24H
   RETURN_SLA_APPROACHING_48H
   RETURN_SLA_OVERDUE
+  WAREHOUSE_AUDIT_CRITICAL_FAIL
 }
 
 enum AlertStatus {
@@ -247,6 +248,7 @@ model Organisation {
   fuelLevyRules      FuelLevyRule[]
   pricingQuotes      PricingQuote[]
   servicingSchedules ServicingSchedule[]
+  warehouseAudits    WarehouseAudit[]
 
   @@map("organisations")
 }
@@ -292,6 +294,8 @@ model User {
   returnTasksAsDriver      ReturnTask[]                @relation("ReturnTaskDriver")
   returnTasksScannedIn     ReturnTask[]                @relation("ReturnTaskScannedInBy")
   returnTasksCreated       ReturnTask[]                @relation("ReturnTaskCreatedBy")
+  warehouseAuditsAsAuditor WarehouseAudit[]            @relation("WarehouseAuditAuditor")
+  warehouseAuditsAsDriver  WarehouseAudit[]            @relation("WarehouseAuditDriver")
 
   @@map("users")
 }
@@ -331,8 +335,9 @@ model Vehicle {
   registrationExpiry DateTime? @db.Date
   createdAt          DateTime  @default(now())
 
-  drivers Driver[]
-  routes  Route[]
+  drivers         Driver[]
+  routes          Route[]
+  warehouseAudits WarehouseAudit[]
 
   @@map("vehicles")
 }
@@ -479,6 +484,73 @@ model ServicingSchedule {
 
   @@unique([organisationId, region])
   @@map("servicing_schedules")
+}
+
+// Weekly warehouse driver compliance audit — uniform/PPE, standard
+// equipment, and vehicle condition, per client or run generally.
+// `critical` is set per item at audit time (not hard-coded per category)
+// since the brief doesn't say which specific items are safety-critical for
+// a given client; the UI defaults PPE-related items to critical as a
+// suggestion, not a settled policy. A FAIL on a critical item raises an
+// Alert immediately.
+enum WarehouseAuditCategory {
+  COMPANY_UNIFORM
+  VISIBLE_LOGO
+  SAFETY_VEST_PPE
+  SAFETY_SHOES
+  STANDARD_TOOLS
+  FURNITURE_BLANKETS
+  STRAPS_TIE_DOWNS
+  TROLLEY
+  DRILL_TOOLS
+  VACUUM
+  CLEANING_PRODUCTS
+  VEHICLE_CLEANLINESS
+  VEHICLE_CONDITION
+  REQUIRED_DOCUMENTATION
+}
+
+enum AuditItemResult {
+  PASS
+  FAIL
+  NOT_APPLICABLE
+}
+
+model WarehouseAudit {
+  id             String        @id @default(cuid())
+  organisationId String? // optional client scope (e.g. Koala) — null = general audit
+  organisation   Organisation? @relation(fields: [organisationId], references: [id])
+  auditorId      String
+  auditor        User          @relation("WarehouseAuditAuditor", fields: [auditorId], references: [id])
+  driverId       String
+  driver         User          @relation("WarehouseAuditDriver", fields: [driverId], references: [id])
+  vehicleId      String?
+  vehicle        Vehicle?      @relation(fields: [vehicleId], references: [id])
+  auditedAt      DateTime      @default(now())
+  notes          String?
+  createdAt      DateTime      @default(now())
+
+  items WarehouseAuditItem[]
+
+  @@index([driverId])
+  @@index([auditedAt])
+  @@map("warehouse_audits")
+}
+
+model WarehouseAuditItem {
+  id               String                 @id @default(cuid())
+  warehouseAuditId String
+  warehouseAudit   WarehouseAudit         @relation(fields: [warehouseAuditId], references: [id], onDelete: Cascade)
+  category         WarehouseAuditCategory
+  result           AuditItemResult
+  critical         Boolean                @default(false)
+  photoUrl         String?
+  correctiveAction String?
+  dueDate          DateTime?
+  resolved         Boolean                @default(false)
+  resolvedAt       DateTime?
+
+  @@map("warehouse_audit_items")
 }
 
 // Collection/exchange return tracking — a job that involves taking goods

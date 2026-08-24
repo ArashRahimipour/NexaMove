@@ -20,6 +20,7 @@ const TYPE_LABEL: Record<string, string> = {
   RETURN_SLA_WARNING_24H: "Return SLA warning (<24h)",
   RETURN_SLA_APPROACHING_48H: "Return SLA approaching",
   RETURN_SLA_OVERDUE: "Return overdue",
+  WAREHOUSE_AUDIT_CRITICAL_FAIL: "Warehouse audit — critical fail",
 };
 
 export default async function AlertsPage() {
