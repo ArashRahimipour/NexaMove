@@ -14,6 +14,7 @@ import {
   Sparkles,
   Calculator,
   PackageSearch,
+  CalendarDays,
 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { SignOutButton } from "@/components/SignOutButton";
@@ -33,6 +34,7 @@ const NAV_ITEMS = [
   { key: "customer-service", href: "/admin/customer-service", label: "Customer Service", icon: Headphones },
   { key: "settlements", href: "/admin/settlements", label: "Settlements", icon: Wallet },
   { key: "organisations", href: "/admin/organisations", label: "Retail Clients", icon: Building2 },
+  { key: "servicing", href: "/admin/servicing", label: "Servicing Days", icon: CalendarDays },
   { key: "audit", href: "/admin/audit", label: "Audit Log", icon: ClipboardList },
   { key: "settings", href: "/admin/settings", label: "Settings", icon: Settings },
 ];

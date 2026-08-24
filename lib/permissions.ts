@@ -42,6 +42,8 @@ export const canOverrideFuelLevy = (role: Role) => role === "ADMIN";
 
 export const canViewAuditLog = (role: Role) => role === "ADMIN" || role === "OPERATIONS_MANAGER";
 
+export const canManageServicing = (role: Role) => role === "ADMIN" || role === "OPERATIONS_MANAGER";
+
 export const canViewReturns = (role: Role) =>
   role === "ADMIN" || role === "OPERATIONS_MANAGER" || role === "DISPATCHER" || role === "CUSTOMER_SERVICE";
 
@@ -50,9 +52,9 @@ export const canViewReturns = (role: Role) =>
 export function visibleNavSections(role: Role): string[] {
   switch (role) {
     case "ADMIN":
-      return ["dashboard", "ai", "routes", "drivers", "vehicles", "dispatch", "pricing", "kpi", "alerts", "returns", "customer-service", "settlements", "organisations", "settings", "audit"];
+      return ["dashboard", "ai", "routes", "drivers", "vehicles", "dispatch", "pricing", "kpi", "alerts", "returns", "customer-service", "settlements", "organisations", "servicing", "settings", "audit"];
     case "OPERATIONS_MANAGER":
-      return ["dashboard", "ai", "routes", "drivers", "dispatch", "pricing", "kpi", "alerts", "returns", "customer-service", "settlements"];
+      return ["dashboard", "ai", "routes", "drivers", "dispatch", "pricing", "kpi", "alerts", "returns", "customer-service", "settlements", "servicing"];
     case "DISPATCHER":
       return ["dashboard", "ai", "routes", "dispatch", "pricing", "alerts", "returns"];
     case "CUSTOMER_SERVICE":

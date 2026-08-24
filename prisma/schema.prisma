@@ -240,12 +240,13 @@ model Organisation {
   active         Boolean  @default(true)
   createdAt      DateTime @default(now())
 
-  users           User[]
-  deliveries      Delivery[]
-  aiConversations AiConversation[]
-  rateCards       RateCard[]
-  fuelLevyRules   FuelLevyRule[]
-  pricingQuotes   PricingQuote[]
+  users              User[]
+  deliveries         Delivery[]
+  aiConversations    AiConversation[]
+  rateCards          RateCard[]
+  fuelLevyRules      FuelLevyRule[]
+  pricingQuotes      PricingQuote[]
+  servicingSchedules ServicingSchedule[]
 
   @@map("organisations")
 }
@@ -452,6 +453,32 @@ model Delivery {
   @@index([deliveryDate])
   @@index([createdAt])
   @@map("deliveries")
+}
+
+// Configurable per-client (and per-region) delivery days — see
+// lib/servicing.ts. region: "" is the client's default/metro schedule;
+// a named region gets its own row with its own days and an optional
+// minimum order/volume threshold. A client with no row here at all is
+// unrestricted — this only ever adds a constraint on top of the default
+// "any day" behaviour, never removes it for clients that don't need it.
+model ServicingSchedule {
+  id                    String       @id @default(cuid())
+  organisationId        String
+  organisation          Organisation @relation(fields: [organisationId], references: [id])
+  // "" (empty string, the default) = the client's default/metro schedule;
+  // a named region otherwise (e.g. "Cairns"). Not nullable — a nullable
+  // field can't be targeted by Prisma's compound-unique upsert, since NULL
+  // never matches deterministically in a unique constraint at the DB level.
+  region                String       @default("")
+  daysOfWeek            Int[] // 0 = Sunday .. 6 = Saturday
+  minimumOrderThreshold Float?
+  active                Boolean      @default(true)
+  notes                 String?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  @@unique([organisationId, region])
+  @@map("servicing_schedules")
 }
 
 // Collection/exchange return tracking — a job that involves taking goods

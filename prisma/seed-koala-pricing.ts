@@ -312,6 +312,24 @@ async function main() {
     });
   }
 
+  // Koala's brief states this explicitly ("Koala non-regional deliveries
+  // operate: Tuesday, Wednesday, Thursday, Friday, Saturday") — not
+  // derived or guessed. Regional servicing days are deliberately NOT
+  // seeded here (no region schedule row created) since none were supplied
+  // and the brief is explicit that regional schedules must not be
+  // hard-coded — an admin configures them under Admin -> Servicing Days
+  // once Koala's real regional frequency is known.
+  await prisma.servicingSchedule.upsert({
+    where: { organisationId_region: { organisationId: koala.id, region: "" } },
+    update: { daysOfWeek: [2, 3, 4, 5, 6], active: true },
+    create: {
+      organisationId: koala.id,
+      region: "",
+      daysOfWeek: [2, 3, 4, 5, 6], // Tue-Sat
+      notes: "Non-regional (metro) servicing days, as supplied in the Koala brief.",
+    },
+  });
+
   console.log("Koala Living pricing seeded: Koala Living QLD Standard + Deluxe rate cards, VIC/NSW general defaults.");
   console.log("Needs Koala data before it's usable: postcode/zone mapping (3 zone shells created, no postcodes), and KOALA_RETURN / KOALA_LATE_CANCELLATION / KOALA_FUTILE_DELIVERY fixed amounts.");
 }

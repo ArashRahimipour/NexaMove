@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/api-auth";
 import { writeAuditLog } from "@/lib/audit";
+import { checkServicingDay } from "@/lib/servicing";
 
 const itemSchema = z.object({
   sku: z.string().optional(),
@@ -36,6 +37,11 @@ const createDeliverySchema = z.object({
   packagingRemovalRequired: z.boolean().optional(),
   specialInstructions: z.string().optional(),
   items: z.array(itemSchema).optional(),
+  // Only meaningful for back-office roles — see the servicing-day check
+  // below. A retail client can never self-override their own client's
+  // configured servicing days.
+  overrideServicingDay: z.boolean().optional(),
+  overrideReason: z.string().optional(),
 });
 
 const MAX_PAGE_SIZE = 100;
@@ -101,6 +107,38 @@ export async function POST(req: Request) {
   // A retail client can only ever create deliveries under their own organisation.
   const organisationId =
     auth.session.user.role === "RETAIL_CLIENT" ? auth.session.user.organisationId ?? undefined : data.organisationId;
+
+  if (organisationId && data.deliveryDate) {
+    // Only the client's default/metro schedule is enforceable today —
+    // there's no field yet resolving a delivery to a named regional
+    // catchment (Cairns, Toowoomba, ...), so `region` is intentionally
+    // omitted here. See lib/servicing.ts.
+    const servicing = await checkServicingDay({
+      organisationId,
+      date: new Date(data.deliveryDate),
+    });
+    // A retail client can never self-override their own client's
+    // configured servicing days — only back-office staff, with a reason.
+    const canOverride = auth.session.user.role !== "RETAIL_CLIENT";
+    if (!servicing.allowed && !(canOverride && data.overrideServicingDay && data.overrideReason?.trim())) {
+      return NextResponse.json(
+        {
+          error: "servicing_day_unavailable",
+          message: servicing.reason,
+          nextAvailableDate: servicing.nextAvailableDate,
+        },
+        { status: 409 }
+      );
+    }
+    if (!servicing.allowed && canOverride) {
+      await writeAuditLog({
+        userId: auth.session.user.id,
+        action: "delivery.servicing_day_overridden",
+        recordType: "Delivery",
+        after: { organisationId, deliveryDate: data.deliveryDate, reason: data.overrideReason },
+      });
+    }
+  }
 
   const count = data.routeId ? await prisma.delivery.count({ where: { routeId: data.routeId } }) : 0;
   const hasRoute = Boolean(data.routeId);
