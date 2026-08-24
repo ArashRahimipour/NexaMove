@@ -17,6 +17,9 @@ const TYPE_LABEL: Record<string, string> = {
   ROUTE_LATE: "Route running late",
   CAPACITY_EXCEEDED: "Capacity exceeded",
   RETAIL_CLIENT_ISSUE: "Retail client issue",
+  RETURN_SLA_WARNING_24H: "Return SLA warning (<24h)",
+  RETURN_SLA_APPROACHING_48H: "Return SLA approaching",
+  RETURN_SLA_OVERDUE: "Return overdue",
 };
 
 export default async function AlertsPage() {

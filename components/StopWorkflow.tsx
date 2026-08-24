@@ -165,6 +165,39 @@ export function StopWorkflow({
 
   const [podResult, setPodResult] = useState<{ capturedAt: string; finalStatus: string } | null>(null);
 
+  const [showReturnForm, setShowReturnForm] = useState(false);
+  const [returnDescription, setReturnDescription] = useState("");
+  const [returnQty, setReturnQty] = useState(1);
+  const [returnSubmitting, setReturnSubmitting] = useState(false);
+  const [returnLogged, setReturnLogged] = useState(false);
+
+  async function logReturnCollection() {
+    if (!returnDescription.trim()) {
+      setError("Describe what you're collecting from the customer.");
+      return;
+    }
+    setReturnSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/returns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deliveryId: delivery.id,
+          collected: true,
+          items: [{ description: returnDescription, quantity: returnQty }],
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to log the collection");
+      setReturnLogged(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to log the collection");
+    } finally {
+      setReturnSubmitting(false);
+    }
+  }
+
   const [showFailedForm, setShowFailedForm] = useState(false);
   const [failReason, setFailReason] = useState<(typeof FAILURE_REASONS)[number][0] | "">("");
   const [failNotes, setFailNotes] = useState("");
@@ -779,6 +812,42 @@ export function StopWorkflow({
                   {delivery.packagingRemovalRequired && <li>{packagingRemoved ? "✅" : "⚠️"} Packaging removed</li>}
                   <li>{hasDamage === null ? "⚠️ Damage check skipped" : hasDamage ? "⚠️ Damage reported" : "✅ No damage identified"}</li>
                 </ul>
+
+                {returnLogged ? (
+                  <p className="rounded-lg bg-[#DCFCE7] px-3 py-2 text-sm text-[#16A34A]">
+                    ✅ Collection logged — the 48-hour return clock has started.
+                  </p>
+                ) : showReturnForm ? (
+                  <div className="space-y-2 rounded-lg bg-elevated p-3">
+                    <p className="text-sm font-medium">📦 Item being collected for return/exchange</p>
+                    <input
+                      className="field-input"
+                      placeholder="What are you taking back?"
+                      value={returnDescription}
+                      onChange={(e) => setReturnDescription(e.target.value)}
+                    />
+                    <input
+                      type="number"
+                      min={1}
+                      className="field-input w-24"
+                      value={returnQty}
+                      onChange={(e) => setReturnQty(Math.max(1, Number(e.target.value) || 1))}
+                    />
+                    <button
+                      type="button"
+                      className="btn-secondary w-full"
+                      disabled={returnSubmitting}
+                      onClick={logReturnCollection}
+                    >
+                      {returnSubmitting ? "Logging…" : "Log collection"}
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" className="text-sm text-brand-400 underline" onClick={() => setShowReturnForm(true)}>
+                    📦 Also collecting an item for return/exchange?
+                  </button>
+                )}
+
                 {geofenceWarning && (
                   <div className="space-y-2 rounded-lg bg-[#FFF7ED] p-3">
                     <p className="text-sm font-medium text-amber-800">⚠️ {geofenceWarning.message}</p>

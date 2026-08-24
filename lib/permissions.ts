@@ -42,18 +42,21 @@ export const canOverrideFuelLevy = (role: Role) => role === "ADMIN";
 
 export const canViewAuditLog = (role: Role) => role === "ADMIN" || role === "OPERATIONS_MANAGER";
 
+export const canViewReturns = (role: Role) =>
+  role === "ADMIN" || role === "OPERATIONS_MANAGER" || role === "DISPATCHER" || role === "CUSTOMER_SERVICE";
+
 // Nav sections a role sees in the back-office shell. Used to render the sidebar
 // and as a second line of defence alongside server-side route checks.
 export function visibleNavSections(role: Role): string[] {
   switch (role) {
     case "ADMIN":
-      return ["dashboard", "ai", "routes", "drivers", "vehicles", "dispatch", "pricing", "kpi", "alerts", "customer-service", "settlements", "organisations", "settings", "audit"];
+      return ["dashboard", "ai", "routes", "drivers", "vehicles", "dispatch", "pricing", "kpi", "alerts", "returns", "customer-service", "settlements", "organisations", "settings", "audit"];
     case "OPERATIONS_MANAGER":
-      return ["dashboard", "ai", "routes", "drivers", "dispatch", "pricing", "kpi", "alerts", "customer-service", "settlements"];
+      return ["dashboard", "ai", "routes", "drivers", "dispatch", "pricing", "kpi", "alerts", "returns", "customer-service", "settlements"];
     case "DISPATCHER":
-      return ["dashboard", "ai", "routes", "dispatch", "pricing", "alerts"];
+      return ["dashboard", "ai", "routes", "dispatch", "pricing", "alerts", "returns"];
     case "CUSTOMER_SERVICE":
-      return ["ai", "customer-service"];
+      return ["ai", "returns", "customer-service"];
     case "RETAIL_CLIENT":
       return ["client-portal"];
     default:

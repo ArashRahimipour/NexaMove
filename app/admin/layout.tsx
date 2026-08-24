@@ -13,6 +13,7 @@ import {
   Settings,
   Sparkles,
   Calculator,
+  PackageSearch,
 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { SignOutButton } from "@/components/SignOutButton";
@@ -28,6 +29,7 @@ const NAV_ITEMS = [
   { key: "pricing", href: "/admin/pricing", label: "Pricing", icon: Calculator },
   { key: "kpi", href: "/admin/kpi", label: "KPI", icon: BarChart3 },
   { key: "alerts", href: "/admin/alerts", label: "Alerts", icon: Bell },
+  { key: "returns", href: "/admin/returns", label: "Returns", icon: PackageSearch },
   { key: "customer-service", href: "/admin/customer-service", label: "Customer Service", icon: Headphones },
   { key: "settlements", href: "/admin/settlements", label: "Settlements", icon: Wallet },
   { key: "organisations", href: "/admin/organisations", label: "Retail Clients", icon: Building2 },

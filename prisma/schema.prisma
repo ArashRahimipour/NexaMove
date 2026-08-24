@@ -193,6 +193,9 @@ enum AlertType {
   ROUTE_LATE
   CAPACITY_EXCEEDED
   RETAIL_CLIENT_ISSUE
+  RETURN_SLA_WARNING_24H
+  RETURN_SLA_APPROACHING_48H
+  RETURN_SLA_OVERDUE
 }
 
 enum AlertStatus {
@@ -285,6 +288,9 @@ model User {
   createdCarrierMappings   CarrierServiceCodeMapping[]
   pricingQuotesCreated     PricingQuote[]
   dispatchScansPerformed   DispatchScan[]              @relation("DispatchScannedBy")
+  returnTasksAsDriver      ReturnTask[]                @relation("ReturnTaskDriver")
+  returnTasksScannedIn     ReturnTask[]                @relation("ReturnTaskScannedInBy")
+  returnTasksCreated       ReturnTask[]                @relation("ReturnTaskCreatedBy")
 
   @@map("users")
 }
@@ -436,6 +442,7 @@ model Delivery {
   aiConversations       AiConversation[]
   pricingQuote          PricingQuote?
   dispatchScans         DispatchScan[]
+  returnTasks           ReturnTask[]
 
   @@index([status])
   @@index([trackingCode])
@@ -445,6 +452,73 @@ model Delivery {
   @@index([deliveryDate])
   @@index([createdAt])
   @@map("deliveries")
+}
+
+// Collection/exchange return tracking — a job that involves taking goods
+// back from a customer (a swap-over, an exchange, a straight collection)
+// must have those goods scanned in at the warehouse within 48 hours. The
+// clock starts at DRIVER_POSSESSION (the moment the driver actually has the
+// goods in hand) rather than the original booking/job time, since that's
+// the one unambiguous, driver-logged event — "48 hours of the booking/job
+// requirement" in the brief could also mean the scheduled job time itself,
+// so this is flagged as an assumption to confirm with Koala, not a settled
+// rule (see lib/returns.ts).
+enum ReturnTaskStatus {
+  CUSTOMER_COLLECTION
+  DRIVER_POSSESSION
+  IN_TRANSIT_TO_WAREHOUSE
+  WAREHOUSE_RETURNED
+  SCANNED_IN
+  CLOSED
+}
+
+model ReturnTask {
+  id         String           @id @default(cuid())
+  deliveryId String
+  delivery   Delivery         @relation(fields: [deliveryId], references: [id])
+  status     ReturnTaskStatus @default(CUSTOMER_COLLECTION)
+
+  driverId String?
+  driver   User?   @relation("ReturnTaskDriver", fields: [driverId], references: [id])
+
+  collectedAt         DateTime? // DRIVER_POSSESSION reached — starts the SLA clock
+  slaDeadline         DateTime? // collectedAt + 48h
+  inTransitAt         DateTime?
+  warehouseReturnedAt DateTime?
+  scannedInAt         DateTime?
+  scannedInById       String?
+  scannedInBy         User?     @relation("ReturnTaskScannedInBy", fields: [scannedInById], references: [id])
+  closedAt            DateTime?
+
+  warehouse String?
+  notes     String?
+
+  createdById String
+  createdBy   User     @relation("ReturnTaskCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items ReturnTaskItem[]
+
+  @@index([deliveryId])
+  @@index([status])
+  @@index([slaDeadline])
+  @@map("return_tasks")
+}
+
+// Individual items being returned, tracked separately from the delivery's
+// own DeliveryItem rows since a return may cover only some items from the
+// original job (e.g. one piece of an exchange, not the whole order).
+model ReturnTaskItem {
+  id           String     @id @default(cuid())
+  returnTaskId String
+  returnTask   ReturnTask @relation(fields: [returnTaskId], references: [id], onDelete: Cascade)
+  description  String
+  sku          String?
+  quantity     Int        @default(1)
+  condition    String?
+
+  @@map("return_task_items")
 }
 
 // A physical warehouse scan of a delivery's consignment/order barcode at
