@@ -14,7 +14,8 @@
     "db:seed:pricing": "tsx prisma/seed-pricing.ts",
     "db:seed:koala": "tsx prisma/seed-koala-pricing.ts",
     "test:pricing": "tsx scripts/pricing-tests.ts",
-    "test:koala-pricing": "tsx scripts/koala-pricing-tests.ts"
+    "test:koala-pricing": "tsx scripts/koala-pricing-tests.ts",
+    "test:schema-integrity": "tsx scripts/schema-integrity-tests.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
