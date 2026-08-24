@@ -28,6 +28,7 @@ export default async function ZonesPage() {
             <tr>
               <th className="px-4 py-3">Code</th>
               <th className="px-4 py-3">Name</th>
+              <th className="px-4 py-3">Postcodes</th>
               <th className="px-4 py-3">Adjustment model</th>
               <th className="px-4 py-3">Amount</th>
               <th className="px-4 py-3">Minimum charge</th>

@@ -12,7 +12,9 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:pricing": "tsx prisma/seed-pricing.ts",
-    "test:pricing": "tsx scripts/pricing-tests.ts"
+    "db:seed:koala": "tsx prisma/seed-koala-pricing.ts",
+    "test:pricing": "tsx scripts/pricing-tests.ts",
+    "test:koala-pricing": "tsx scripts/koala-pricing-tests.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

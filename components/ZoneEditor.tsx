@@ -7,6 +7,7 @@ type Zone = {
   id: string;
   code: string;
   name: string;
+  postcodes: string | null;
   adjustmentModel: string;
   fixedSurcharge: number | null;
   multiplier: number | null;
@@ -19,6 +20,7 @@ const MODELS = ["NONE", "FIXED_TABLE", "FIXED_SURCHARGE", "MULTIPLIER", "CLIENT_
 export function ZoneEditor({ zone }: { zone: Zone }) {
   const router = useRouter();
   const [name, setName] = useState(zone.name);
+  const [postcodes, setPostcodes] = useState(zone.postcodes ?? "");
   const [model, setModel] = useState(zone.adjustmentModel);
   const [surcharge, setSurcharge] = useState(zone.fixedSurcharge != null ? String(zone.fixedSurcharge) : "");
   const [multiplier, setMultiplier] = useState(zone.multiplier != null ? String(zone.multiplier) : "");
@@ -35,6 +37,7 @@ export function ZoneEditor({ zone }: { zone: Zone }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
+          postcodes: postcodes.trim() ? postcodes.trim() : null,
           adjustmentModel: model,
           fixedSurcharge: surcharge ? Number(surcharge) : null,
           multiplier: multiplier ? Number(multiplier) : null,
@@ -55,6 +58,14 @@ export function ZoneEditor({ zone }: { zone: Zone }) {
       <td className="px-4 py-2 font-medium">{zone.code}</td>
       <td className="px-4 py-2">
         <input className="field-input py-1" value={name} onChange={(e) => setName(e.target.value)} />
+      </td>
+      <td className="px-4 py-2">
+        <input
+          className="field-input w-48 py-1"
+          placeholder="4000, 4001, 4005…"
+          value={postcodes}
+          onChange={(e) => setPostcodes(e.target.value)}
+        />
       </td>
       <td className="px-4 py-2">
         <select className="field-input py-1" value={model} onChange={(e) => setModel(e.target.value)}>
