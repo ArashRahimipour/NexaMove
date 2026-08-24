@@ -6,6 +6,7 @@ import { saveUpload } from "@/lib/storage";
 import { checkGeofence } from "@/lib/geofence";
 import { assertTransition } from "@/lib/status-workflow";
 import { writeAuditLog } from "@/lib/audit";
+import { sendCustomerNotification, deliveryConfirmationSmsBody, deliveryConfirmationEmailHtml } from "@/lib/notifications";
 
 const photoSchema = z.object({
   dataUrl: z.string().startsWith("data:image/"),
@@ -172,6 +173,19 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     before: { status: delivery.status },
     after: { status: finalStatus },
   });
+
+  if (delivery.customerPhone || delivery.customerEmail) {
+    await sendCustomerNotification({
+      deliveryId: delivery.id,
+      notificationType: "DELIVERY_CONFIRMATION",
+      customerName: delivery.customerName,
+      customerPhone: delivery.customerPhone,
+      customerEmail: delivery.customerEmail,
+      smsBody: deliveryConfirmationSmsBody(),
+      emailSubject: "Your NexaMove delivery is complete",
+      emailHtml: deliveryConfirmationEmailHtml(delivery.customerName, delivery.trackingCode),
+    });
+  }
 
   return NextResponse.json({ pod, finalStatus }, { status: 201 });
 }

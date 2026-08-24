@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/api-auth";
 import { assertTransition } from "@/lib/status-workflow";
 import { writeAuditLog } from "@/lib/audit";
 import { checkGeofence } from "@/lib/geofence";
+import { sendCustomerNotification, trackingLinkSmsBody, trackingLinkEmailHtml } from "@/lib/notifications";
 import type { DeliveryStatus, TrackingEventType } from "@prisma/client";
 
 const eventSchema = z.object({
@@ -107,6 +108,27 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     before: { status: delivery.status },
     after: { status: newStatus },
   });
+
+  // Fire the "on the way" tracking-link notification the first time a
+  // delivery goes en route. Best-effort, never blocks or fails this
+  // request — see lib/notifications/index.ts.
+  if ((type === "ROUTE_STARTED" || type === "EN_ROUTE") && (delivery.customerPhone || delivery.customerEmail)) {
+    await Promise.all([
+      sendCustomerNotification({
+        deliveryId: delivery.id,
+        notificationType: "TRACKING_LINK",
+        customerName: delivery.customerName,
+        customerPhone: delivery.customerPhone,
+        customerEmail: delivery.customerEmail,
+        smsBody: trackingLinkSmsBody(delivery.trackingCode),
+        emailSubject: "Your NexaMove delivery is on the way",
+        emailHtml: trackingLinkEmailHtml(delivery.customerName, delivery.trackingCode),
+      }),
+      prisma.trackingEvent.create({
+        data: { deliveryId: delivery.id, type: "CUSTOMER_NOTIFIED" },
+      }),
+    ]);
+  }
 
   return NextResponse.json({ event }, { status: 201 });
 }

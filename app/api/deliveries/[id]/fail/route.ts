@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/api-auth";
 import { saveUpload } from "@/lib/storage";
 import { assertTransition } from "@/lib/status-workflow";
 import { writeAuditLog } from "@/lib/audit";
+import { sendCustomerNotification, deliveryFailedSmsBody, deliveryFailedEmailHtml } from "@/lib/notifications";
 
 const failSchema = z.object({
   reason: z.enum([
@@ -116,6 +117,19 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     before: { status: delivery.status },
     after: { status: "FAILED", reason: data.reason },
   });
+
+  if (delivery.customerPhone || delivery.customerEmail) {
+    await sendCustomerNotification({
+      deliveryId: delivery.id,
+      notificationType: "DELIVERY_FAILED",
+      customerName: delivery.customerName,
+      customerPhone: delivery.customerPhone,
+      customerEmail: delivery.customerEmail,
+      smsBody: deliveryFailedSmsBody(),
+      emailSubject: "We were unable to complete your NexaMove delivery",
+      emailHtml: deliveryFailedEmailHtml(delivery.customerName),
+    });
+  }
 
   return NextResponse.json({ report }, { status: 201 });
 }
