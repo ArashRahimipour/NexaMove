@@ -309,6 +309,7 @@ model User {
   clientDriverTrainingsApproved  ClientDriverTraining[]         @relation("ClientDriverTrainingApprovedBy")
   warehouseRepShiftsAsRep        WarehouseRepresentativeShift[] @relation("WarehouseRepShiftRep")
   warehouseRepShiftsCreated      WarehouseRepresentativeShift[] @relation("WarehouseRepShiftCreatedBy")
+  driverLocations                DriverLocation[]               @relation("DriverLocationDriver")
 
   @@map("users")
 }
@@ -381,8 +382,9 @@ model Route {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
-  deliveries    Delivery[]
-  dispatchScans DispatchScan[]
+  deliveries      Delivery[]
+  dispatchScans   DispatchScan[]
+  driverLocations DriverLocation[]
 
   @@index([driverId, date])
   @@index([date])
@@ -715,6 +717,31 @@ model WarehouseRepresentativeShift {
 
   @@index([date])
   @@map("warehouse_representative_shifts")
+}
+
+// Continuous driver location, for live tracking + ETA — deliberately NOT
+// written on every GPS reading. The driver's browser polls
+// navigator.geolocation and only POSTs when the position has moved past a
+// distance/time threshold (see lib/gpsTracking.ts), per the brief's
+// explicit "do not cause unnecessary database writes every few seconds if
+// the driver has not meaningfully moved." Only the latest row per driver
+// matters operationally; history is kept for now (route replay / audit)
+// but isn't pruned automatically — a real retention job is a documented
+// follow-up, not implemented here since no retention policy was supplied.
+model DriverLocation {
+  id         String   @id @default(cuid())
+  driverId   String
+  driver     User     @relation("DriverLocationDriver", fields: [driverId], references: [id])
+  routeId    String?
+  route      Route?   @relation(fields: [routeId], references: [id])
+  lat        Float
+  lng        Float
+  accuracy   Float?
+  recordedAt DateTime @default(now())
+
+  @@index([driverId, recordedAt])
+  @@index([routeId, recordedAt])
+  @@map("driver_locations")
 }
 
 // Collection/exchange return tracking — a job that involves taking goods

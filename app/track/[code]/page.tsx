@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { DELIVERY_STATUS_LABEL } from "@/lib/status-workflow";
 import { CustomerAiWidget } from "@/components/CustomerAiWidget";
+import { LiveTrackingMap } from "@/components/LiveTrackingMap";
 
 const EVENT_LABEL: Record<string, string> = {
   JOB_CREATED: "Booking confirmed",
@@ -73,6 +74,8 @@ export default async function TrackingPage({ params }: { params: { code: string 
           </p>
         )}
       </div>
+
+      <LiveTrackingMap trackingCode={delivery.trackingCode} />
 
       <ol className="mt-6 space-y-4 border-l-2 border-line pl-4">
         {delivery.trackingEvents.map((e) => (
