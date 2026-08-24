@@ -60,6 +60,12 @@ On your host's environment-variable settings (never commit these to git):
 | `NEXTAUTH_URL` | Yes | The full public URL of this deployment, e.g. `https://app.nexamove.com.au` |
 | `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Recommended for production | See step 4 |
 | `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN` | Recommended | See step 6 |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Optional | Live map on the customer tracking page. Without it, tracking still shows a plain-text ETA window from the driver's live GPS. |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` | Optional | Customer SMS (tracking link, delivery confirmation, delivery failure). Without these, every send attempt is still logged to `NotificationLog` with status `NOT_CONFIGURED`. |
+| `RESEND_API_KEY`, `NOTIFICATIONS_FROM_EMAIL` | Optional | Same customer notifications, email channel. Verify the sending domain in Resend before this will actually deliver. |
+| `OPENAI_API_KEY`, `OPENAI_MODEL` | Optional | NexaMove AI (Operations + customer Delivery Assistant). Without it, both show "temporarily unavailable"; everything else works normally. |
+
+See `.env.example` for the full list with inline explanations of what each one degrades to when unset.
 
 ## 4. Production file storage (photos & signatures)
 

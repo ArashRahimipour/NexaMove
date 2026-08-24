@@ -96,12 +96,24 @@ Before relying on it for high-volume operations, be aware:
 - **No self-service password reset / change-password UI** — see step 1.
 - **No route optimisation or drag-to-reorder stops** — stops are delivered
   in the order you add them.
-- **No SMS/push notifications, no live Google Maps operations view, no
-  precise route-time estimation** — these need a Google Maps Platform key
-  and an SMS/email provider account, which only you can create (billing
-  required). See `docs/DEPLOYMENT.md`. Navigation still works via a plain
-  Google Maps deep link with no key needed.
+- **Customer SMS/email and the live tracking map need a paid provider key**
+  — the app sends tracking-link/confirmation/failure texts and emails, and
+  shows a live map with ETA on the customer tracking page, but only once
+  you set `TWILIO_*`, `RESEND_API_KEY`, and
+  `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` (billing required with each provider —
+  see `docs/DEPLOYMENT.md`). Without them: no text/email is sent (every
+  attempt is still logged), and tracking shows a plain-text ETA window
+  with no map. ETA itself is a heuristic (average speed + a road-distance
+  factor), not turn-by-turn routing. Driver navigation still works via a
+  plain Google Maps deep link with no key needed.
 - **Admin dashboard refreshes on page load**, not live via websockets.
+  Live driver GPS is tracked and polled by the customer tracking page
+  every 15 seconds, but internal admin views (routes, dispatch) don't
+  auto-refresh.
+- **Runsheet reconciliation matching is exact-only** (`/admin/runsheets`)
+  — a row that doesn't exactly match a delivery's tracking code, external
+  reference, or name+postcode is left `UNMATCHED` for manual review rather
+  than guessed.
 
 None of these are stubbed-out buttons — they're simply not built yet, or
 are explicitly blocked on you providing a paid third-party API key. If you
